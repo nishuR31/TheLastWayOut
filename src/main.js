@@ -239,7 +239,18 @@ function wire() {
 }
 
 // ---------- boot ----------
-G.init($('c')); ui.init(); input.init($('c'), { onPause: pauseGame }); bindSettings(); applySettings(); wire()
+try {
+  G.init($('c')); ui.init(); input.init($('c'), { onPause: pauseGame }); bindSettings(); applySettings(); wire()
+} catch (err) {
+  // Graceful degradation when WebGL2 is unavailable: explain instead of a black page.
+  console.error(err)
+  const ld = $('loading')
+  if (ld) {
+    ld.classList.remove('hidden')
+    ld.innerHTML = '<div class="ld-t">THE LAST WAY OUT</div><div class="ld-s" style="margin-top:1em;max-width:34em;line-height:1.6">This game needs WebGL2, which your browser or graphics driver did not provide.<br>Try a current browser with hardware acceleration enabled.</div>'
+  }
+  throw err
+}
 G.start()
 const q = new URLSearchParams(location.search)
 renderReport(null)

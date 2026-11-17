@@ -104,7 +104,7 @@ export async function use(pos, label, o) {
 // race two interactions; returns 0 or 1
 export async function either(a, b) {
   const ia = G.interact(a.pos, a.label, { r: a.r || 3.2, cone: -1, once: true }), ib = G.interact(b.pos, b.label, { r: b.r || 3.2, cone: -1, once: true })
-  if (auto()) { await wait(0.6); const k = G.autoPick ?? 0; const it = G.interacts[k]; G.interacts.forEach(i => i.res && i.res()); }
+  if (auto()) { await wait(0.6); G.interacts.forEach(i => i.res && i.res()) }
   const r = await Promise.race([ia.then(() => 0), ib.then(() => 1)])
   G.clearInteracts(); return auto() ? (G.autoPick ?? 0) : r
 }

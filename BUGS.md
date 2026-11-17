@@ -1,5 +1,15 @@
 # BUGS / STATUS (honest)
 
+## CURRENT STATUS (authoritative — this section supersedes the dated history below)
+- Build: `npm run build` passes on Vite 8. `npm audit`: **0 vulnerabilities** (deps pinned exactly; `minimatch` overridden to 11.0.9 for the packaging toolchain).
+- Voice: **265 Hinglish + 265 English** clips in `public/voice/{hi,en}` (the older "243/240" figure below is stale). Three silent manifest entries are intentional stage directions.
+- F3 debug overlay **is built** (the older "not built" note below is stale).
+- AppImage/deb are **not built in this checkout** (the older "rebuilt" notes below refer to a previous environment). Run `npm run dist` to produce them.
+- Dead/duplicated code removed: `src/story/act2.js`, `src/levels/forest.js`, and the unused `ch5`/`ch6` copies in `act3.js`. The dead `tts` setting path was removed.
+- Hardening: Electron sandbox is on by default (`TLWO_NO_SANDBOX=1` to opt out), `corsEnabled` removed from the `app://` scheme, path containment uses `path.resolve`/`path.relative`, DevTools gated to unpackaged builds.
+- Fallbacks: guarded dynamic level loading with a user-facing toast, `getUnlocked()` shape validation, bound rain loop, cached per-frame temporaries, vendor chunk splitting, 13 MB of unreferenced textures removed.
+- Still open (honest): no real-GPU frame-rate test, no human playthrough, no Electron window launch in this environment, no key rebinding / 3D menu / post-processing / skinned characters.
+
 ## Fixed and verified (headless, real key events)
 - **Ch1 cannot leave the house**: the door-approach walk zone was ~0.26 m wide after the 0.35 m player radius. It is now widened. Spawn faces the door and an OBJECTIVE HUD was added. Verified: real W key + steering reaches z=11.6 (the gate).
 - **Chapter 4 (bamboo/storm) near-black**: mean luminance was ~11/255. Night/storm/rain/deep/still moods were brightened (ambient, hemisphere, horizon, moon). Re-measured ~13.5 only, so it is still very dark. Not fully fixed; see Open.
@@ -21,7 +31,7 @@
 
 ## Status update (latest session)
 ### Fixed / done
-- Voice: 243 Hinglish + 240 English Piper neural clips rendered (the rest are silent "..." / stage-direction lines by design). Transcribed samples back word-for-word in both languages; both languages load and play in-browser with no errors. Settings > Voice language (Hinglish / English / None).
+- Voice: 265 Hinglish + 265 English neural clips rendered (updated count; the rest are silent "..." / stage-direction lines by design). Transcribed samples back word-for-word in both languages; both languages load and play in-browser with no errors. Settings > Voice language (Hinglish / English / None).
 - Lip-sync: the speaking character's mouth opens from the clip amplitude.
 - Chapter 4 (bamboo/storm) no longer black: per-mood exposure is now wired to the renderer, ambient raised, torch wider/brighter (mean luminance 12 -> ~19/255; bamboo, path and torch pool are readable).
 - Graphics: 17 Poly Haven CC0 PBR sets (diffuse + normal + roughness) now drive plaster, mud, brick, roof tile, tin, wood, cement, floor tile, earth, stone, bark, grass, road; world-scaled UVs on boxes; MSAA; soft sun shadows (Medium/High); woven-cloth normal map on clothes; capsule limbs and smoother heads.

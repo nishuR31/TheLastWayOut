@@ -47,7 +47,7 @@ function headTexture(o) {
 }
 
 export function makePerson(name, over = {}) {
-  const o = { ...OUTFITS[name], ...over }
+  const o = { ...(OUTFITS[name] || OUTFITS.nishan), ...over }
   const H = o.h, sc = H / 1.74, thin = o.thin || 1
   const legL = 0.88 * sc, torsoL = 0.56 * sc, neck = 0.07 * sc
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body)

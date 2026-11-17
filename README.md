@@ -2,16 +2,19 @@
 
 A grounded, first-person psychological horror game for **Ubuntu desktop** (Electron + Three.js).
 You are **Nishan**. Your friend **Nishant** is lost with you on a scooter in a forest in rural India.
-Everything is built from code: procedural graphics, physics, and synthesised sound. There are no external assets.
+
+The game uses procedural geometry and synthesised audio, plus shipped assets under `public/`:
+Poly-Haven CC0 PBR textures, recorded Hinglish/English voice clips, and bundled fonts. It is not
+asset-free. See `FULL_STORY.md` for the complete story specification.
 
 At the end, the game shows **Asli Sach** ("the real truth"). These cards explain the sounds, shapes and legends you met, in Hinglish and English.
 
 ## Run on Ubuntu
 
 ```bash
-# one-time: Node.js 18+  (sudo apt install nodejs npm)
-cd webapp
-./run.sh            # installs deps on first run, builds, opens the desktop window
+# one-time: Node.js 20.19+  (sudo apt install nodejs npm)
+cd thelastwayout          # run from the project root (the directory containing run.sh)
+./run.sh                  # installs deps on first run, builds, opens the desktop window
 ```
 
 Other options:
@@ -23,35 +26,47 @@ Other options:
 | `npm run dist` | build `release/*.AppImage` and `release/*.deb` (electron-builder) |
 | `the-last-way-out.desktop` | launcher entry; copy to `~/.local/share/applications/` |
 
-Needs a GPU with WebGL2. In-game quality options are in Settings.
-**F11** toggles fullscreen.
+Needs a GPU with WebGL2. In-game quality options are in Settings. **F11** toggles fullscreen.
+
+Electron's Chromium sandbox is enabled by default. On hosts that block unprivileged user
+namespaces, opt out deliberately with `TLWO_NO_SANDBOX=1 ./run.sh` (or the same env var with
+`npm start`).
 
 ## Controls
 
 | Desktop | Action |
 |---|---|
 | W A S D / mouse | move / look |
-| Shift | run (not while pushing the scooter) |
-| C | crouch |
-| E | interact |
+| Shift + W | run (you will get tired) |
+| Shift (hold, no W) | crouch / hide |
+| C | switch first-person / third-person camera |
+| E | interact / pick up twigs / light or feed a fire |
 | F | torch |
+| T | build a fire where you stand (needs twigs) |
 | P | phone |
+| B / Shift + B | ride the scooter / push it by hand |
+| I | inventory |
+| M | map |
+| H | hint; press twice to hop a few metres ahead if stuck |
 | Space | scooter brake |
 | Esc | pause / settings |
 
 Touch controls are also included. Accessibility options: bilingual subtitles (Hinglish + English), sound captions, volume sliders, reduced shake and flash.
 
-## Story (about 35 to 45 minutes)
+## Story (target 60–90 minutes)
 
-c1 A normal day, then the ride, c2 the forest and the repeating paths, c3 bamboo shade in a storm, c4 the man and the voices,
-c5 deeper into the forest, c6 the peepal tree and the flickering light, c7 the village and the knock, c8 inside the house (the red drink),
-c9 the uncle's two friends, c10 the shadow, c11 the cremation ground (the clock freezes at 4:00 AM).
+c1 a normal morning, permission, the ride; c2 the sunlit campsite and the loop where the bike is
+visible but unreachable; c5 riding into the lost forest; c6 the bamboo shelter and the fire;
+c7 the village that returns and the uncle's house; c9 his two friends; c10 the shadow;
+c11 the cremation ground, where the uncle vanishes.
 
-At c11 **you choose**:
-- **Ending A**: follow the direction the uncle pointed. The forest, a punctured tyre, and phone signal at the road. Back home you learn the tiffin was left at home and there is no village there.
-- **Ending B**: stay at the cremation ground. A figure strikes a samadhi, voices from behind, and the tall figure (you faint, with no chase). An ordinary stranger wakes you and explains. Over tea, the red drink question comes back.
+At c11 **you choose** between three endings:
 
-Both endings leave the red-drink question unanswered. The game never identifies the drink or confirms that the uncle was a ghost.
+- **Ending A** — follow the direction the uncle pointed. A long stuck night, released at sunrise; a lift home and the scooter returned later.
+- **Ending B** — stay and hide. The faceless tall figure; an ordinary stranger finds you, a shortcut leads to a tea stall, and a phone call brings you home.
+- **Ending C** — stay and approach the pickaxe figure. A chase and a muddy pit; both friends survive and wake up in hospital.
+
+Nobody dies in any ending. The red sharbat and the village stay unexplained, and the uncle is never confirmed to be a ghost.
 
 ## Reality cards (the post-game report)
 
@@ -75,21 +90,24 @@ Cards unlock as you meet each event and are saved in localStorage.
 
 ## Tech
 
-- Vite 5 + Three.js 0.170 + cannon-es (scooter `RaycastVehicle`). Plain JS ES modules.
-- Levels (`src/levels/*.js`) are lazy-loaded. Chapters (`src/story/act*.js`) are async scripts that run through `story.js`, a state machine with branch A/B.
+- Vite 8 + Three.js 0.170 + cannon-es (scooter `RaycastVehicle`). Plain JS ES modules.
+- `three`, `cannon-es` and fonts are split into cacheable vendor chunks; levels are lazy-loaded
+  by `import.meta.glob` in `src/game.js`. Chapters (`src/story/*.js`) are async scripts run by
+  `story.js`, a state machine with branches A/B/C.
 - Headless test hooks: `?ch=<chapter index>&auto=1` (or `auto=b` for branch B), `&fast=6` (simulate faster than real time). These are used for Playwright smoke tests.
+- Dependency versions are pinned exactly in `package.json`; `npm audit` reports 0 vulnerabilities.
 
 ## Status
 
-- Verified in headless Chromium (software WebGL): every chapter and both full endings run to the end card with no console errors. I checked screenshots of several scenes.
-- Full autoplay QA, both endings: Ending A (ch1 -> 13a end card) and Ending B (-> 14b end card) run clean, no console errors. This is scripted autopilot, NOT a human playthrough.
-- Packages built in this sandbox: `release/The Last Way Out-1.0.0.AppImage` (169 MB) and `release/the-last-way-out_1.0.0_amd64.deb` (132 MB). `dpkg-deb -I` reads the deb fine.
-- **Not verified:** the Electron window was not launched (the sandbox has no libgtk-3), and no real GPU / frame-rate test. Test on your machine. If the window fails, `./run.sh` (browser/Electron dev) is the fallback. deb needs: `sudo apt install ./release/the-last-way-out_1.0.0_amd64.deb`; AppImage: `chmod +x` then run (add `--no-sandbox` if your kernel blocks user namespaces).
-- Building the deb in a low-RAM box: `TMPDIR=$HOME/tmpbuild npx electron-builder --linux deb` (a small /tmp tmpfs breaks the fpm tar step).
-- Visuals: night horizon checked in a screenshot (clean, no comb); cow redrawn as a zebu (hump, horns, dewlap) but still a primitive-shape model; characters are still procedural/stylised, NOT GTA-5 fidelity; no bloom/SSAO.
-- UI added: Settings has FOV and subtitle-size sliders, loading overlay between levels, F3 debug overlay. Key rebinding and a 3D menu background are NOT done.
+- Verified in headless Chromium (software WebGL): every chapter and all three endings run to the end card with no console errors. Autopilot, not a human playthrough.
+- `npm run build` passes with Vite 8 (vendor chunks + lazy levels). `npm audit`: 0 vulnerabilities.
+- **Not built in this checkout:** the AppImage/deb (`npm run dist`) have not been regenerated here — build them locally if you want the installers.
+- **Not verified:** the Electron window was not launched in this environment, and no real-GPU frame-rate test was run. Test on your machine. If the window fails, `./run.sh` with a browser fallback is available.
+- Visuals are stylised, not photoreal; no skinned humans, SSAO/bloom or HDRI. UI has FOV and subtitle-size sliders, a loading overlay and an F3 debug overlay; key rebinding and a 3D menu background are not implemented.
+- For a low-RAM box, build the deb with `TMPDIR=$HOME/tmpbuild npx electron-builder --linux deb`.
 
-## Navigation (new)
+## Navigation
+
 - `M` full map (you, facing cone, route, goal, Nishant, scooter; wheel/+/- zoom), minimap + compass always on HUD, gold diamond in the world.
 - `H` hint, `H` twice = hop a few metres ahead along the route if you are ever stuck. `Shift` sprint with stamina bar.
 - Settings > Navigation aid to choose full / compass only / off.

@@ -106,6 +106,7 @@ function updatePit(G, dt) {
     return
   }
   // stage 3: on the road again; the scooter is switched on and the camera swings round behind Nishan
+  if (!sc) return finishPit(G)
   P.t3 += dt; const k3 = Math.min(1, P.t3 / 3.4)
   if (!P.lit && P.t3 > 1.0) { P.lit = true; sc.light(true); audio.click(); caption3('[the key turns. The engine catches]') }
   const bx = p.pos.x - Math.sin(p.yaw) * 3.0, bz = p.pos.z - Math.cos(p.yaw) * 3.0, fx = p.pos.x + rx * 3.0 + P.dir.x * 1.5, fz = p.pos.z + rz * 3.0 + P.dir.z * 1.5
