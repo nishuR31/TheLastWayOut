@@ -1,0 +1,16 @@
+[
+  { "eval": "window.__dev.cmd('play', 0, 'b')" },
+  { "wait": 2500 },
+  { "check": "renderer-ready" },
+  { "check": "level-loaded" },
+  { "screenshot": "shots/smoke-ch1.png" },
+  { "eval": "window.__dev.state()" },
+  { "cmd": "skip", "after": false },
+  { "wait": 800 },
+  { "press": "KeyW", "ms": 1200 },
+  { "eval": "window.__dev.state()" },
+  { "check": "no-page-errors" },
+  { "check": "player-position-finite" },
+  { "check": "camera-position-finite" },
+  { "eval": "window.__dev.report()" }
+]

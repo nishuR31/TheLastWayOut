@@ -1,6 +1,7 @@
 // Chapters 5-7 of the final script: riding into the lost forest, THE FIRE (twigs, petrol, plug, spark) and the village that returns.
-import { G, ui, audio, THREE, N, T, say, wait, load, startScene, endScene, setTime, reveal, fear, tired, use, gate, snapTo, go, goTrail, trailD, trailLen, lookFor, lookedAway, around, stepsAt, spawn, caption, choose, compHold, compFollow, pushOff } from './helpers.js'
+import { G, ui, audio, THREE, N, T, say, wait, load, startScene, endScene, setTime, reveal, fear, tired, use, gate, snapTo, go, goTrail, trailD, trailLen, lookFor, lookedAway, around, stepsAt, spawn, caption, choose, compHold, compFollow, pushOff, dread } from './helpers.js'
 import { fire } from '../core/fire.js'
+import { makeTorch, makeSparkPlug, makePetrolCan } from '../world/props.js'
 
 const P = () => G.player
 const V = (x, y, z) => new THREE.Vector3(x, y, z)
@@ -97,7 +98,7 @@ export async function ch6(s) {
   await T('Bhai, mujhe bahut thand lag rahi hai.', 'I am so cold.', { dur: 2.2 })
   await N('Aag chahiye.', 'We need a fire.', { dur: 1.6 })
   await T('Arunab bhaiya ka matchbox!', 'Arunab\'s matchbox!', { dur: 2 })
-  G.matches = 0; ui.toast('Matchbox geela hai. Teeliyan toot gayin 🔥✗', 4)
+  G.matches = 0; ui.toast('Matchbox geela hai. Teeliyan toot gayin [ic:matchbox]✗', 4)
   await N('Bike ka plug. Arunab ne kaha tha chingari deta hai. Aur tank mein petrol hai.', 'The bike plug. Arunab said it gives a spark. And there is petrol in the tank.', { dur: 4.4 })
   await T('Petrol door rakhna. Wo bhi bola tha.', 'Keep petrol far. He said that too.', { dur: 2.6 })
   await N('Pehle plan banate hain.', 'First, a plan.', { dur: 1.8 })
@@ -152,6 +153,7 @@ export async function ch6(s) {
   await T('Haan, mera phone pocket mein hai.', 'Yes, my phone is in my pocket.', { dur: 2 })
   await N('Aur zyada mat daalna. Zyada hoga toh aag bhadkegi. Hamara kaam chhoti aag se hai.', 'Do not pour too much. A big flare is not what we want.', { dur: 3.4 })
   caption('[a few careful drops on a dry tiffin lid, soaked into the cloth. The cap closed tight. The bike moved a few steps further away]', 5)
+  const can = makePetrolCan(); can.position.set(bikePos.x + 0.7, 0, bikePos.z + 0.5); can.rotation.y = 0.7; L.group.add(can)
   sc.place(bikePos.x + 3, bikePos.z + 1.5, 0.8); sc.park()
   await wait(1.4)
   if (G.tankFull) ui.toast('Tank mein zyada hai · There is plenty of petrol', 3); G.petrol = true
@@ -159,6 +161,7 @@ export async function ch6(s) {
   // ---- STEP 4: the spark ----
   ui.objective('Bike se spark plug nikalo · Take out the spark plug')
   await use(V(sc.chassis.position.x, 0.6, sc.chassis.position.z), 'Spark plug nikalo', { r: 3.2, cone: -1 })
+  const plug = makeSparkPlug(); c.P.hold(plug, 1, [0, -0.34, 0.1])
   if (G.sparePlug) { await T('Chacha wala plug? Waah. Kamaal ka dimaag hai.', 'Chacha\'s plug? Brilliant thinking.', { dur: 2.8 }); await N('Aaj pehli baar tune tareef ki.', 'First time you ever praised me.', { dur: 2 }) }
   else { await N('Bike ka apna plug geela hai. Kapde aur garm haath se sukhana padega.', 'The bike\'s own plug is wet. I have to dry it against cloth and warm skin.', { dur: 3.6 }); caption('[drying the plug takes a while]', 3); await wait(3) }
   ui.objective('Plug ko engine ke dhaatu se lagao, Nishant kick maarega · Hold the plug to the engine; Nishant kicks')
@@ -168,10 +171,17 @@ export async function ch6(s) {
   ui.objective(null)
   const fuel = 120 + (G.petrol ? 50 : 0) + (G.tankFull ? 50 : 0) + (spot === 2 ? 40 : 0) + (G.sparePlug ? 20 : 0)
   fire.lightNow(pit, fuel)
+  c.P.hold(null)
   s.fire.made = true; s.fire.best = spot === 2 && !!G.sparePlug
   caption('[the petrol-soaked cloth smokes, and catches]', 3)
   // the rain pauses for exactly three seconds as the flame appears
   G.env.set('still'); audio.silence(true); await wait(3); audio.silence(false); G.env.set('storm')
+  // hold on the small flame — the one warm image of the second half,
+  // framed unsteadily as if the camera is as cold as they are
+  try {
+    await G.shot({ from: V(pit.x + 2.4, 1.5, pit.z + 1.9), to: V(pit.x + 0.85, 0.95, pit.z + 0.7), lookFrom: V(pit.x, 0.34, pit.z), lookTo: V(pit.x, 0.46, pit.z), dur: 2.6, fov: 48, fov1: 56, arc: { x: -0.25, y: 0.18, z: 0.2 }, handheld: 0.45 })
+  } finally { G.endShot() }
+  audio.tinnitus(3200, 1.4, 0.1); dread(0.25)
   await T('Bhai... baarish ruk gayi thi na?', 'The rain stopped, didn\'t it?', { dur: 2.4 })
   await N('Ek second ke liye.', 'For a second.', { dur: 1.6 })
   await T('Ek second ke liye. Haan.', 'For a second. Yes.', { dur: 2 })
@@ -258,6 +268,7 @@ export async function ch6(s) {
     await N('Nikalna padega. Abhi.', 'We have to go. Now.', { dur: 2.2 })
   } else if (choice === 1) {
     G.brand = true; G.torch.color.set('#ff9a46'); G.torchOn = true
+    const brand = makeTorch(); c.P.hold(brand, 1, [0, -0.3, 0.16])
     await T('Aag peeche kyun ja rahi hai?', 'Why is the flame pointing backward?', { dur: 2.6 }); await N('Hawa hai shayad.', 'The wind, maybe.', { dur: 1.6 }); await T('Hawa aage se aa rahi hai.', 'The wind is coming from the front.', { dur: 2.2 })
     fire._out(pit)
   } else {
@@ -298,6 +309,23 @@ export async function ch6(s) {
   await gate(() => L.mirage.count >= 3, () => L.mirage.relocate(), 0)
   G.batteryOverride = 40; audio.clang(P().pos, 1.6); caption('[the phone\'s battery drops suddenly to 40%. A single distant bell rings once]', 5)
   reveal('light', 'again')
+  // The THIRD time the village returns, someone is finally standing in it.
+  // He walks out of that same village right here — no cut, no teleport back to
+  // the village entrance. If they turn away again, the village is simply there.
+  {
+    const mp = L.mirage.group.position, p = P()
+    const d = Math.hypot(mp.x - p.pos.x, mp.z - p.pos.z) || 1
+    const q = { x: p.pos.x + (mp.x - p.pos.x) / d * 9, z: p.pos.z + (mp.z - p.pos.z) / d * 9 }
+    const un = spawn('uncle', q.x, q.z, Math.atan2(p.pos.x - q.x, p.pos.z - q.z))
+    un.pose('stand'); un.face(p.pos)
+    caption('[a man in a dry coat steps out of the village that is not there. He looks as tired as they feel]', 4.4)
+    dread(0.22)
+    await say('Uncle', 'Beta? Tum dono yahan kya kar rahe ho? Itna andhera ho gaya.', 'Son? What are you two doing out here? It is so late.', { pos: un.pos, dur: 3.8 })
+    await N('...Uncle?', '...Uncle?', { dur: 2 })
+    await say('Uncle', 'Chalo, andar chalte hain. Raat baarish se pehle nikalna padega.', 'Come. Let us go inside. We must be in before the rain.', { pos: un.pos, dur: 3.4 })
+    un.walkTo(p.pos.x, p.pos.z + 2, 1.3)
+    await wait(1.8); G.removeActor(un)
+  }
   await N('Do hi raaste hain. Jungle mein ghoomte rahein, ya gaon mein jaayein.', 'There are only two ways. Keep wandering the forest, or go in.', { dur: 4 })
   await T('Kam se kam chhat toh milegi.', 'At least there will be a roof.', { dur: 2.4 })
   L.mirage.auto = false

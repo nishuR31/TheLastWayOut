@@ -1,7 +1,7 @@
 // Indian-forest kit: instanced trees, peepal, banyan, bamboo, undergrowth, rocks
 import * as THREE from 'three'
 import { tex, withPBR } from './textures.js'
-import { RNG, nearestOnPoly, clamp } from '../core/util.js'
+import { RNG, nearestOnPoly, clamp, noise2 } from '../core/util.js'
 
 const mat = (o) => withPBR(new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0, ...o }))
 let _geo
@@ -32,29 +32,55 @@ export function scatterForest(G, opts) {
   const [x0, z0, x1, z1] = opts.bounds, dens = (opts.density || 0.05) * G.cfg.density
   const area = (x1 - x0) * (z1 - z0), N = Math.floor(area * dens)
   const tr = [], cn = [], tc = [], cc = [], fm = [], gm = [], bushM = []
-  const farFromTrails = (x, z, m) => { for (const t of opts.trails || []) { if (nearestOnPoly(t.pts, x, z).d < t.hw + m) return false } for (const a of opts.avoid || []) if (Math.hypot(x - a.x, z - a.z) < a.r) return false; return true }
+  // 'natural' mode breaks the straight rank of trees beside a path (a fixed
+  // clearance radius makes two tidy walls) by modulating that clearance with
+  // noise, and uses a jittered grid so trees never coincide or leave big holes.
+  const natural = opts.mode === 'natural'
+  const farFromTrails = (x, z, m) => {
+    const wob = natural ? noise2(x * 0.035, z * 0.035) * 3.6 : 0
+    for (const t of opts.trails || []) { if (nearestOnPoly(t.pts, x, z).d < t.hw + m + wob) return false }
+    for (const a of opts.avoid || []) if (Math.hypot(x - a.x, z - a.z) < a.r) return false
+    return true
+  }
+  const samplePoints = (count, gap) => {
+    if (!natural) { const a = []; for (let i = 0; i < count; i++) a.push([r.range(x0, x1), r.range(z0, z1)]); return a }
+    const spacing = Math.max(gap, Math.sqrt(area / Math.max(1, count)) * 0.85)
+    const cols = Math.ceil((x1 - x0) / spacing), rows = Math.ceil((z1 - z0) / spacing), out = []
+    for (let cz = 0; cz < rows; cz++) for (let cx = 0; cx < cols; cx++) {
+      const x = x0 + (cx + 0.15 + r.next() * 0.7) * spacing, z = z0 + (cz + 0.15 + r.next() * 0.7) * spacing
+      if (x > x1 || z > z1) continue
+      if (r.next() > 0.45 + noise2(x * 0.02, z * 0.02) * 0.6) continue
+      out.push([x, z])
+    }
+    return out
+  }
   const col = new THREE.Color()
+  const ground = (x, z) => (opts.level && opts.level.groundY ? opts.level.groundY(x, z) : 0)
   const place = (x, z, dz = 0) => {
-    const s = r.range(0.8, 1.5), h = r.range(7, 13) * s, tw = r.range(0.22, 0.4) * s
-    tr.push(mtx(x, 0, z + dz, tw, h * 0.72, tw, r.range(0, 6.28), r.range(-0.04, 0.04), r.range(-0.04, 0.04)))
+    const s = r.range(0.8, 1.5), h = r.range(7, 13) * s, tw = r.range(0.22, 0.4) * s, gy = ground(x, z + dz)
+    tr.push(mtx(x, gy, z + dz, tw, h * 0.72, tw, r.range(0, 6.28), r.range(-0.04, 0.04), r.range(-0.04, 0.04)))
     const cr = r.range(2.2, 3.8) * s
-    for (let k = 0; k < 3; k++) { cn.push(mtx(x + r.range(-1.2, 1.2), h * (0.72 + k * 0.1), z + dz + r.range(-1.2, 1.2), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), r.range(0, 6))); col.setHSL(0.26 + r.range(-0.03, 0.04), 0.4, r.range(0.14, 0.26)); cc.push(col.clone()) }
+    for (let k = 0; k < 3; k++) { cn.push(mtx(x + r.range(-1.2, 1.2), gy + h * (0.72 + k * 0.1), z + dz + r.range(-1.2, 1.2), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), r.range(0, 6))); col.setHSL(0.26 + r.range(-0.03, 0.04), 0.4, r.range(0.14, 0.26)); cc.push(col.clone()) }
     if (opts.walk && (opts.allTrees || nearestOnPoly(opts.trails[0].pts, x, z).d < (opts.trails[0].hw + 14))) opts.walk.circle(x, z + dz, tw * 1.05 + 0.1)
   }
   const wrap = opts.wrapZ
-  for (let i = 0; i < N; i++) {
-    const x = r.range(x0, x1), z = r.range(z0, z1)
+  for (const [x, z] of samplePoints(N, 4.2)) {
     if (!farFromTrails(x, z, 1.4)) continue
     place(x, z)
-    if (wrap) { const per = wrap.z1 - wrap.z0; place(x, z, per); place(x, z, -per) }
+    if (wrap && !natural) { const per = wrap.z1 - wrap.z0; place(x, z, per); place(x, z, -per) }
   }
   // undergrowth (ferns, grass cards, bushes)
   const U = Math.floor(area * 0.09 * G.cfg.density)
-  for (let i = 0; i < U; i++) {
-    const x = r.range(x0, x1), z = r.range(z0, z1); if (!farFromTrails(x, z, 0.5)) continue
+  for (const [x, z] of samplePoints(U, 1.4)) {
+    if (!farFromTrails(x, z, 0.5)) continue
     const dzs = wrap ? [0, wrap.z1 - wrap.z0, wrap.z0 - wrap.z1] : [0]
     const kind = r.next(), s = r.range(0.7, 1.7), ry = r.range(0, 6.28)
-    for (const dz of dzs) { if (kind < 0.4) fm.push(mtx(x, 0, z + dz, s * 1.3, s * 1.0, s * 1.3, ry)); else if (kind < 0.85) gm.push(mtx(x, 0, z + dz, s * 1.1, s * 0.9, s * 1.1, ry)); else { bushM.push(mtx(x, 0.35 * s, z + dz, 0.9 * s, 0.7 * s, 0.9 * s, ry)) } }
+    for (const dz of dzs) {
+      const gy = ground(x, z + dz)
+      if (kind < 0.4) fm.push(mtx(x, gy, z + dz, s * 1.3, s * 1.0, s * 1.3, ry))
+      else if (kind < 0.85) gm.push(mtx(x, gy, z + dz, s * 1.1, s * 0.9, s * 1.1, ry))
+      else bushM.push(mtx(x, gy + 0.35 * s, z + dz, 0.9 * s, 0.7 * s, 0.9 * s, ry))
+    }
   }
   const trunkMat = mat({ map: tex.bark(), color: opts.tint || 0xffffff }), leafMat = mat({ map: tex.leaf(), color: 0xffffff })
   makeInstances(group, g.trunk, trunkMat, tr)
@@ -64,7 +90,7 @@ export function scatterForest(G, opts) {
   card2(fm, tex.fern(), 1); card2(gm, tex.grassBlades(), 1)
   if (bushM.length) makeInstances(group, g.blob, leafMat, bushM)
   // rocks
-  const rocks = []; for (let i = 0; i < area * 0.0035; i++) { const x = r.range(x0, x1), z = r.range(z0, z1); if (!farFromTrails(x, z, 0.8)) continue; const s = r.range(0.3, 1.0); rocks.push(mtx(x, s * 0.2, z, s, s, s, r.range(0, 6))); if (wrap) { rocks.push(mtx(x, s * 0.2, z + (wrap.z1 - wrap.z0), s, s, s, 1)); rocks.push(mtx(x, s * 0.2, z - (wrap.z1 - wrap.z0), s, s, s, 2)) } }
+  const rocks = []; for (let i = 0; i < area * 0.0035; i++) { const x = r.range(x0, x1), z = r.range(z0, z1); if (!farFromTrails(x, z, 0.8)) continue; const s = r.range(0.3, 1.0); rocks.push(mtx(x, ground(x, z) + s * 0.2, z, s, s, s, r.range(0, 6))); if (wrap) { const per = wrap.z1 - wrap.z0; rocks.push(mtx(x, ground(x, z + per) + s * 0.2, z + per, s, s, s, 1)); rocks.push(mtx(x, ground(x, z - per) + s * 0.2, z - per, s, s, s, 2)) } }
   makeInstances(group, g.rock, mat({ map: tex.stone('#7d7c72'), roughness: 1 }), rocks)
   return group
 }
@@ -120,6 +146,38 @@ export function makeBambooClump(G, opts = {}) {
   group.userData.sway = sway; group.userData.radius = rad
   // dead culms w/ faint foxfire (bioluminescent fungus on decaying wood) – very subtle
   if (opts.glow) { for (let i = 0; i < 4; i++) { const a = r.range(0, 6.28), d = r.range(rad * 0.7, rad * 1.4); const dm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.5, 5), new THREE.MeshBasicMaterial({ color: '#6dffb0', transparent: true, opacity: 0.35 })); dm.position.set(Math.cos(a) * d, 0.06, Math.sin(a) * d); dm.rotation.z = 1.4; group.add(dm) } }
+  return group
+}
+
+// A grove instead of a ring of tight clumps: clump centres are scattered over
+// a bounded annulus with minimum separation and trail avoidance, then each
+// clump gets its own size, height, density and lean. opts:
+// {bounds, count, gap, centre, inner, outer, trails, walk, seed, level, glow}
+export function scatterBamboo(G, opts = {}) {
+  const r = new RNG(opts.seed || 99), group = new THREE.Group(), swayers = []
+  const [x0, z0, x1, z1] = opts.bounds || [-40, -20, 40, 80]
+  const count = Math.max(1, Math.floor((opts.count || 16) * (G.cfg ? G.cfg.density : 1)))
+  const gap = opts.gap || 5.5
+  const centre = opts.centre || { x: (x0 + x1) / 2, z: (z0 + z1) / 2 }
+  const inner = opts.inner || 9, outer = opts.outer || 34
+  const pts = []
+  for (let i = 0; i < count * 10 && pts.length < count; i++) {
+    const a = r.range(0, 6.28), d = r.range(inner, outer)
+    const x = centre.x + Math.cos(a) * d * 1.15, z = centre.z + Math.sin(a) * d
+    if (x < x0 || x > x1 || z < z0 || z > z1) continue
+    if (opts.trails) { let ok = true; for (const t of opts.trails) if (nearestOnPoly(t.pts, x, z).d < t.hw + gap * 0.55) { ok = false; break } if (!ok) continue }
+    if (pts.some(p => Math.hypot(p.x - x, p.z - z) < gap)) continue
+    pts.push({ x, z })
+  }
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]
+    const b = makeBambooClump(G, { seed: (opts.seed || 99) * 10 + i, n: Math.floor(r.range(18, 34)), radius: r.range(2.0, 4.2), h: r.range(8, 13), glow: opts.glow && r.next() < 0.3 })
+    const gy = opts.level && opts.level.groundY ? opts.level.groundY(p.x, p.z) : 0
+    b.position.set(p.x, gy, p.z)
+    group.add(b); swayers.push(b.userData.sway)
+    if (opts.walk) opts.walk.circle(p.x, p.z, Math.max(1.3, b.userData.radius * 0.65))
+  }
+  group.userData.swayers = swayers
   return group
 }
 

@@ -1,7 +1,8 @@
 // Chapters 9-11 (escort, shadow, cremation ground + branch) and both endings.
 import { G, ui, audio, THREE, N, T, U, say, wait, load, startScene, endScene, setTime, compHold, compFollow, reveal, fear, tired, use, gate, snapTo, go, goTrail, trailD, trailLen, lookFor, lookedAway, focus, around, stepsAt, spawn, caption, followAlong, stopFollow, pushOn, pushOff, choose, enableTrail } from './helpers.js'
 import { ptAt, sideAt } from '../world/common.js'
-import { makePickaxe, makeGlass, makeSteelGlass } from '../world/people.js'
+import { makePickaxe, makeSteelGlass } from '../world/people.js'
+import { makeChai } from '../world/props.js'
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z)
 const P = () => G.player
@@ -51,6 +52,7 @@ export async function ch9(s) {
   await gate(() => lookedAway(m1.pos, 0.2) && lookedAway(m2.pos, 0.2), null, 40)
   crew.splice(1, 2); stopFollow(); followAlong(W, crew, 1.5)
   m1.setVisible(false); m2.setVisible(false)
+  audio.cloth && audio.cloth(m1.pos); audio.cloth && audio.cloth(m2.pos)
   setTimeout(() => { try { G.removeActor(m1); G.removeActor(m2) } catch (e) {} }, 50)
   await wait(5.5)    // the delay: nothing is announced
   await T('Uncle, woh dono kahan gaye?', 'Uncle, where did those two go?', { dur: 2.4 })
@@ -186,6 +188,7 @@ export async function ch11(s) {
   await wait(2.4)
   await T('Kitni door, uncle?', 'How far, uncle?', { dur: 2 })
   await wait(1)
+  audio.cloth && audio.cloth(un.pos); audio.whisper && audio.whisper(null, 4)
   G.removeActor(un)
   await G.turnTo(V(L.refs.rest.x + 2.6, 1.5, L.refs.rest.z + 0.3), 1.2)
   await wait(1.6)
@@ -278,7 +281,7 @@ export async function ch12a(s) {
   pushOff(); L.setDawn(); sc.place(-5.5, 343, 1.2)
   await wait(1.5)
   G.hasSignal = true; audio.signalUp(); audio.phoneRing()
-  ui.toast('📶 Network aa gaya!', 3)
+  ui.toast('[ic:network] Network aa gaya!', 3)
   await N('Network aa gaya! Ghar pe call laga.', 'Network is back! Call home.', { dur: 2.6 })
   await T('Mummy ko bol, hum safe hain. Bas aa rahe hain.', 'Tell Mom we\'re safe. We\'re just coming.', { dur: 3 })
   await wait(1)
@@ -407,7 +410,7 @@ export async function ch12b(s) {
   await T('Aur usko thakaan bhi nahi ho rahi.', 'And he isn\'t getting tired.', { dur: 2.4 })
   await N('Kya hum phir kisi loop mein phans gaye?', 'Have we got stuck in another loop?', { dur: 2.6 })
   await T('Par ye shamshan hai. Yahan toh aisa nahi hona chahiye...', 'But this is a cremation ground. This shouldn\'t happen here...', { dur: 3.2 })
-  // the branch point from story.txt: approach the man (Ending 2 / C) or stay hidden and watch (Ending 3 / B)
+  // the branch point from the_last_way_out_final.md: approach the man (Ending 2 / C) or stay hidden and watch (Ending 3 / B)
   const kk = s.pref === 1 ? 0 : 1
   if (kk === 0) {
     s.branch = 'C'
@@ -573,7 +576,7 @@ export async function ch14b(s) {
   ui.titleCard('ENDING B', 'Chai', '6:00 AM', 3)
   ui.toast('Road par seedha chalte raho', 4)
   await go(0, 40, 4)
-  G.hasSignal = true; audio.signalUp(); audio.phoneRing(); ui.toast('📶 Network aa gaya', 3)
+  G.hasSignal = true; audio.signalUp(); audio.phoneRing(); ui.toast('[ic:network] Network aa gaya', 3)
   await T('Network aa gaya! Ghar pe phone kar.', 'Network is back! Call home.', { dur: 2.4 })
   await wait(1)
   await N('Mummy, hum theek hain. Bas aa rahe hain. Aake sab batayenge.', 'Mom, we\'re fine. We\'re on our way. We\'ll explain everything when we arrive.', { dur: 4.2 })
@@ -601,11 +604,17 @@ export async function ch14b(s) {
   reveal('drink')
   await wait(3.4)
   // the ordinary sound interrupts
-  const g1 = makeGlass(true, '#b4742c'), g2 = makeGlass(true, '#b4742c')
-  g1.position.set(R.tableTop.x - 0.1, R.tableTop.y + 0.06, R.tableTop.z); g2.position.set(R.tableTop.x + 0.15, R.tableTop.y + 0.06, R.tableTop.z + 0.02)
+  const tt = R.tableTop
+  const g1 = makeChai(), g2 = makeChai()
+  g1.position.set(tt.x - 0.12, tt.y + 0.04, tt.z); g2.position.set(tt.x + 0.16, tt.y + 0.04, tt.z + 0.02)
   L.group.add(g1, g2); audio.teaGlass()
   await say('Chaiwala', 'Lo bhaiya, garam chai.', 'Here, brothers, hot tea.', { pos: cw.pos, dur: 2.6, gap: 0 })
-  await wait(2.4)
+  // a slow, slightly unsteady push-in — the last ordinary image of the night
+  try {
+    await G.shot({ from: V(tt.x - 1.9, 1.55, tt.z - 1.2), to: V(tt.x - 0.75, 1.3, tt.z - 0.4), lookFrom: V(tt.x, 0.92, tt.z), lookTo: V(tt.x, 1.0, tt.z), dur: 2.1, fov: 46, fov1: 58, arc: { x: 0.18, y: 0.22, z: 0.1 }, handheld: 0.3 })
+  } finally { G.endShot() }
+  c.pose('sit_drink'); await wait(1.8); c.pose('sit')
+  await wait(0.8)
   await endScene(2.8)
   s.onEnd('ENDING B — Chai ke saath ek sawaal', 'Zyadatar baaton ke saaf jawaab mil gaye. Par us laal sharbat ka koi jawaab nahi mila.')
 }

@@ -1,11 +1,12 @@
 import { audio } from './audio.js'
 import { lineId } from './hash.js'
+import { inlineIcons } from './icons.js'
 const $ = (id) => document.getElementById(id)
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 const F0 = { Nishan: 118, Nishant: 132, Uncle: 98, Beti: 250, Mummy: 215, Chacha: 105, Papa: 100, Stranger: 112, Aadmi: 108, Chaiwala: 115, Awaaz: 135 }
 
 class UI {
-  constructor() { this.subMode = 'both'; this.caps = true; this._capT = null; this._toastT = null; this.reduceFlash = false; this.voiceLang = 'hi'; this.lines = null; this.objText = null }
+  constructor() { this.subMode = 'both'; this.caps = true; this._capT = null; this._toastT = null; this.reduceFlash = false; this.voiceLang = 'hi'; this.lines = null; this.objText = null; this.playerChar = 'Nishan' }
   init() {
     audio.onCaption = (t, d) => this.caption(t, d)
     fetch('./voice/lines.json').then(r => r.json()).then(j => { this.lines = j }).catch(() => { this.lines = {} })
@@ -21,7 +22,14 @@ class UI {
   async say(who, hi, en, opts = {}) {
     const mode = this.subMode, len = (hi || '').length
     let dur = opts.dur || Math.max(1.6, 0.9 + len * 0.05)
-    $('subs-who').textContent = who || ''
+    // Character selection swaps the two friends' on-screen names only;
+    // clip lookup and lip-sync keep the original speaker id.
+    const shown = this.playerChar === 'Nishant' && who === 'Nishan' ? 'Nishant'
+      : this.playerChar === 'Nishant' && who === 'Nishant' ? 'Nishan' : who
+    $('subs-who').textContent = shown || ''
+    // Keep the true speaker id so CSS can give each voice its own colour —
+    // Nishan, Nishant, the uncle and the disembodied "Awaaz" should not read alike.
+    $('subs').dataset.who = who || ''
     if (mode === 'en') { $('subs-hi').textContent = en || hi; $('subs-en').textContent = '' }
     else { $('subs-hi').textContent = mode === 'off' ? '' : hi; $('subs-en').textContent = mode === 'hi' || mode === 'off' ? '' : (en || '') }
     $('subs').classList.toggle('show', mode !== 'off')
@@ -36,9 +44,20 @@ class UI {
   }
   hideSubs() { $('subs').classList.remove('show') }
   caption(t, d = 2) { if (!this.caps) return; const e = $('caption'); e.textContent = t; e.classList.add('show'); clearTimeout(this._capT); this._capT = setTimeout(() => e.classList.remove('show'), d * 1000) }
-  toast(t, d = 3.5) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(this._toastT); this._toastT = setTimeout(() => e.classList.remove('show'), d * 1000) }
+  toast(t, d = 3.5) {
+    const e = $('toast'); e.innerHTML = inlineIcons(t); e.classList.remove('reason'); e.classList.add('show')
+    clearTimeout(this._toastT); this._toastT = setTimeout(() => e.classList.remove('show'), d * 1000)
+  }
+  // A blocked action explained in red: what happened AND why.
+  reason(t, d = 2.8) {
+    const e = $('toast'); e.innerHTML = '✗  ' + inlineIcons(t); e.classList.add('show', 'reason')
+    clearTimeout(this._toastT); this._toastT = setTimeout(() => { e.classList.remove('show', 'reason') }, d * 1000)
+  }
   prompt(text, key = 'E') {
     const p = $('prompt'); if (!text) { p.classList.remove('show'); return }
+    // Observing is free but powerless — give it a calm, cool register so it
+    // never reads like an ordinary "use" action.
+    p.classList.toggle('observe', /dekho|observe|suno|listen|pehle|notice/i.test(text))
     if (p.dataset.t !== text + key) { $('prompt-t').textContent = text; p.querySelector('kbd').textContent = key; p.dataset.t = text + key }
     p.classList.add('show')
   }

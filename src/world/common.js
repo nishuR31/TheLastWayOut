@@ -2,6 +2,7 @@
 import * as THREE from 'three'
 import { Level } from './build.js'
 import { scatterForest } from './nature.js'
+import { rolling } from './terrain.js'
 import { nearestOnPoly } from '../core/util.js'
 import { tex, withPBR } from './textures.js'
 
@@ -38,6 +39,7 @@ export function projDist(pts, x, z) {
 // A forest level made of trails. o: {name, trails:[{pts,hw,tex,rep,y}], bounds, density, seed, ground:'grass', tint, avoid, groundSize}
 export function forestLevel(G, o) {
   const L = new Level(G, o.name)
+  if (o.rolling !== false) rolling(L, o.seed || 3, o.relief ?? 1.5)
   const gs = o.groundSize || [500, 700, 0, 0]
   L.ground(gs[0], gs[1], o.ground || 'grass', 7, gs[2], gs[3], o.groundColor || 0xffffff)
   for (const t of o.trails) {
@@ -45,7 +47,7 @@ export function forestLevel(G, o) {
     if (!t.noRibbon) t.mesh = L.ribbon(t.pts, t.hw * 0.95, t.tex || 'mud', t.rep || 3, t.y || 0.012, t.color || 0xffffff)
     if (!t.noWalk) L.walk.corridor(t.pts, t.hw, t.name || 'trail')
   }
-  if (o.bounds) L.add(scatterForest(G, { bounds: o.bounds, trails: o.trails, density: o.density || 0.05, seed: o.seed || 3, avoid: o.avoid || [], walk: L.walk, tint: o.tint, allTrees: o.freeRoam !== false }))
+  if (o.bounds) L.add(scatterForest(G, { bounds: o.bounds, trails: o.trails, density: o.density || 0.05, seed: o.seed || 3, avoid: o.avoid || [], walk: L.walk, tint: o.tint, allTrees: o.freeRoam !== false, mode: o.natural === false ? undefined : 'natural', level: L }))
   const trails = o.trails
   L.surface = (x, z) => { for (const t of trails) if (nearestOnPoly(t.pts, x, z).d < t.hw) return t.surface || 'mud'; return 'grass' }
   L.trails = trails
@@ -65,7 +67,7 @@ export function sideAt(pts, d, off = 0) {
 export function clearing(L, x, z, r, name = '', texKey = 'mud', rep = 4) {
   const t = tex[texKey]().clone(); t.needsUpdate = true; t.repeat.set(r * 2 / rep, r * 2 / rep)
   const m = new THREE.Mesh(new THREE.CircleGeometry(r * 0.95, 28), withPBR(new THREE.MeshStandardMaterial({ map: t, roughness: 1 })))
-  m.rotation.x = -Math.PI / 2; m.position.set(x, 0.013, z); m.receiveShadow = true; L.add(m)
+  m.rotation.x = -Math.PI / 2; m.position.set(x, (L.groundY ? L.groundY(x, z) : 0) + 0.013, z); m.receiveShadow = true; L.add(m)
   L.walk.disc(x, z, r, name); return m
 }
 // far-away lantern glow (not fogged so it can be seen through the dark)

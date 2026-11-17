@@ -4,7 +4,7 @@ import { lineId } from '../src/core/hash.js'
 const str = String.raw`(?:'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")`
 const ev = (s) => new Function('return ' + s)()
 const lines = {}
-const files = fs.readdirSync('src/story').filter(f => /^act\d\.js$/.test(f))
+const files = fs.readdirSync('src/story').filter(f => f.endsWith('.js') && f !== 'helpers.js' && f !== 'story.js')
 const NAMES = { N: 'Nishan', T: 'Nishant', U: 'Uncle' }
 for (const f of files) {
   const src = fs.readFileSync('src/story/' + f, 'utf8')

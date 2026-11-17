@@ -2,7 +2,7 @@
 // (with the bikes) sixty steps away at the far edge. Day first; the story turns the weather.
 import * as THREE from 'three'
 import { forestLevel, clearing, nightTick } from '../world/common.js'
-import { makeBambooClump, makeSiris, makeRock, makeLog } from '../world/nature.js'
+import { scatterBamboo, makeSiris, makeRock, makeLog } from '../world/nature.js'
 import { signboard, bx, cyl, motorbike } from '../world/build.js'
 import { tex } from '../world/textures.js'
 import { R } from '../core/util.js'
@@ -32,8 +32,8 @@ export function build(G, opts = {}) {
   // the stream, flowing away from the camp downhill to the bamboo
   const st = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 78), new THREE.MeshStandardMaterial({ color: '#5d8394', roughness: 0.08, metalness: 0.6, transparent: true, opacity: 0.82 })); st.rotation.x = -Math.PI / 2; st.rotation.z = 0.58; st.position.set(-26, 0.03, 80); L.add(st); L.refs.stream = new THREE.Vector3(-22, 0.1, 70)
   // the bamboo grove behind the clearing
-  const gp = [[-26, 112], [-34, 100], [-18, 104], [-42, 112], [-10, 112]]
-  gp.forEach((p, i) => { const b = makeBambooClump(G, { seed: 50 + i, n: 40, radius: 2.8, h: 10 }); b.position.set(p[0], 0, p[1]); L.add(b); L.walk.circle(p[0], p[1], 2.6) })
+  const grove = scatterBamboo(G, { bounds: [-60, 88, 4, 130], centre: { x: -26, z: 110 }, inner: 4, outer: 24, gap: 5.5, count: 9, seed: 51, trails: L.trails, walk: L.walk, level: L })
+  L.add(grove)
   // the sal tree (far edge, ~sixty steps away) with other visitors' bikes, and ours
   const sal = makeSiris(1.9); sal.position.set(38, 0, 94); L.add(sal); L.walk.circle(38, 94, 0.7); L.refs.salTree = new THREE.Vector3(38, 0, 94)
   const cols = ['#2a2a2e', '#a37a1d', '#1d4a7a']

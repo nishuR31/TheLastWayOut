@@ -11,6 +11,7 @@
   "homepage": "./",
   "scripts": {
     "dev": "vite",
+    "run":"./run.sh",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "start": "npm run build && electron .",

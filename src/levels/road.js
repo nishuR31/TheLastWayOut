@@ -6,7 +6,8 @@ import { scatterForest, makePalm } from '../world/nature.js'
 import { makeTraffic } from '../world/traffic.js'
 import { placePits } from '../core/roam.js'
 import { smoothPts, polyLen, projDist, ptAt } from '../world/common.js'
-import { tex } from '../world/textures.js'
+import { tex, withPBR } from '../world/textures.js'
+import { building, tree as varietyTree, terrainPatch } from '../world/variety.js'
 import { R, nearestOnPoly } from '../core/util.js'
 import { populateHome } from './home.js'
 
@@ -60,7 +61,89 @@ export function build(G, opts = {}) {
   const segs = [[150, 300, 0.004], [300, 450, 0.012], [450, 600, 0.022], [600, 880, 0.034]]
   for (const [a, b, d] of segs) {
     const A = side(a, 0), B = side(Math.min(len, b), 0)
-    L.add(scatterForest(G, { bounds: [Math.min(A.x, B.x) - 70, Math.min(A.z, B.z) - 70, Math.max(A.x, B.x) + 70, Math.max(A.z, B.z) + 70], trails: [{ pts, hw: 7.4 }], density: d * 0.5, seed: Math.floor(a) + 5, walk: L.walk, allTrees: true, avoid: [{ x: 60, z: 15, r: 110 }] }))
+    L.add(scatterForest(G, { bounds: [Math.min(A.x, B.x) - 95, Math.min(A.z, B.z) - 95, Math.max(A.x, B.x) + 95, Math.max(A.z, B.z) + 95], trails: [{ pts, hw: 7.4 }], density: d * 0.95, seed: Math.floor(a) + 5, walk: L.walk, allTrees: true, avoid: [{ x: 60, z: 15, r: 110 }] }))
+  }
+  // ---- vivid countryside: pavements, lanes into the fields, crops, orchards and homes ----
+  {
+    for (const sgn of [1, -1]) {
+      const walk = []
+      for (let d = 150; d < 450; d += 10) { const s = side(d, sgn * (hwAt(d) + 1.1)); walk.push({ x: s.x, z: s.z }) }
+      if (walk.length > 1) L.ribbon(walk, () => 0.85, 'cement', 2, 0.014, 0xffffff, false)
+    }
+    for (let d = 200, n = 0; d < 840; d += 95, n++) {
+      const sgn = n % 2 ? 1 : -1
+      const lane = [side(d, 0), side(d + 8, sgn * 18), side(d + 22, sgn * 44)]
+      L.ribbon(lane.map(p => ({ x: p.x, z: p.z })), () => 1.5, 'mud', 2, 0.011, 0xffffff, false)
+    }
+    const cropCols = ['#7d9a3a', '#b6a24c', '#5f8f46', '#c2a24e']
+    const tree = (x, z, s = 1) => {
+      const g = new THREE.Group()
+      cyl(g, 0.2 * s, 0.3 * s, 3.6 * s, withPBR(new THREE.MeshStandardMaterial({ map: tex.bark() })), 0, 0, 0, 7)
+      for (let i = 0; i < 3; i++) sph(g, (1.4 + R.range(-0.3, 0.4)) * s, new THREE.MeshStandardMaterial({ map: tex.leaf(), color: '#7fae63' }), R.range(-0.9, 0.9), 3.7 * s + i * 0.65, R.range(-0.9, 0.9))
+      g.position.set(x, 0, z); L.add(g)
+    }
+    let k = 0
+    for (let d = 165; d < 860; d += 62) {
+      const sgn = k % 2 ? 1 : -1, p = side(d, sgn * R.range(26, 46)), col = cropCols[k % cropCols.length]
+      const fw = R.range(24, 40), fd = R.range(30, 52)
+      terrainPatch(L, p.x, p.z, fw, fd, { color: col, crop: col, rows: 4, ry: p.yaw })
+      const kinds = ['neem', 'banyan', 'palm', 'conifer', 'bush']
+      for (let t = 0; t < 5; t++) {
+        const q = side(d + R.range(-18, 18), sgn * R.range(38, 68))
+        const g = varietyTree({ kind: kinds[(k + t) % kinds.length], s: 0.8 + R.next() * 0.7 })
+        g.position.set(q.x, 0, q.z); L.add(g)
+      }
+      // homes only along the low-density town stretch, well inside the tree line
+      if (d < 440 && k % 3 === 0) {
+        const hp = side(d + R.range(-8, 8), sgn * R.range(16, 26))
+        buildHouse(L, { x: hp.x, z: hp.z, w: 6 + R.next() * 2.5, d: 5 + R.next(), h: 2.8 + R.next() * 0.6, rot: hp.yaw, col: ['#e2cfa8', '#cbb9a0', '#d8c2a8'][k % 3], roof: ['tile', 'flat', 'tin'][k % 3], interior: false, windows: [{ side: 's', x: -1.5, y: 1.2, w: 0.9, h: 0.9, lit: true }] })
+      }
+      k++
+    }
+  }
+  // ---- busy township: shops with people to talk to, a gym, extra dhabas and fuel stops ----
+  {
+    const shopSigns = ['Kirana General Store', 'Tea & Snacks', 'Bike Repair', 'Medical Store', 'Chai Stall']
+    let n = 0
+    for (let d = 210; d < 440; d += 46, n++) {
+      const sgn = n % 2 ? 1 : -1, off = sgn * R.range(9.5, 14), p = side(d, off)
+      building(L, {
+        x: p.x, z: p.z, w: 5.2, d: 5, h: 2.7,
+        rot: p.yaw + (off > 0 ? Math.PI / 2 : -Math.PI / 2),
+        col: ['#c9b08a', '#a8bfae', '#d0b4a0'][n % 3], roof: ['tile', 'flat', 'tin'][n % 3],
+        interior: false, name: shopSigns[n % shopSigns.length],
+        signBg: n % 3 === 2 ? '#2a5a7a' : '#8a3a2a', awning: true
+      })
+      const q = side(d + 2, sgn * R.range(7.5, 9))
+      const npc = G.addActor(n % 2 ? 'chaiwala' : 'farmer')
+      npc.place(q.x, q.z, sgn > 0 ? Math.PI : 0); npc.sfx = false; npc.pose('stand')
+      G.addInteract({
+        pos: new THREE.Vector3(q.x, 1, q.z), label: 'Dukaandar se baat karo · Talk to the shopkeeper',
+        r: 2.6, cone: -1, once: false,
+        onUse: () => G.ui.say('Dukaandar', 'Bhaiya, kya chahiye?', 'What do you need, brother?', { pos: new THREE.Vector3(q.x, 1.2, q.z) })
+      })
+    }
+    // open-air gym on the left
+    {
+      const p = side(330, -13), g = new THREE.Group()
+      bx(g, 8, 0.12, 6, M('#7a7468'), 0, 0, 0)
+      for (const x of [-2.5, 0, 2.5]) { bx(g, 0.08, 1.6, 0.08, M('#4a4a4a'), x, 0.8, -1.5); bx(g, 1.2, 0.1, 0.1, M('#333'), x, 1.6, -1.5) }
+      bx(g, 2, 0.3, 0.6, M('#55443a'), 0, 0.45, 1.4)
+      g.position.set(p.x, 0, p.z); g.rotation.y = p.yaw; L.add(g)
+      const trainer = G.addActor('farmer'); trainer.place(p.x + 2, p.z + 1.5, 0); trainer.sfx = false
+      G.addInteract({ pos: new THREE.Vector3(p.x + 2, 1, p.z + 1.5), label: 'Trainer se baat karo · Talk to the trainer', r: 2.6, cone: -1, once: false,
+        onUse: () => G.ui.say('Trainer', 'Bhai, thoda saadhana zaroori hai!', 'A little exercise is necessary, brother!', { pos: new THREE.Vector3(p.x + 2, 1.2, p.z + 1.5) }) })
+      L.refs.gym = new THREE.Vector3(p.x, 1, p.z)
+    }
+    // a second dhaba and a second fuel stop
+    for (const [d, off, label] of [[410, 11, 'DHABA · MEALS'], [250, -12, 'FUEL STOP · OPEN']]) {
+      const p = side(d, off), g = new THREE.Group()
+      bx(g, 6, 2.4, 0.2, M('#c9a882'), 0, 0, -1.5)
+      const sg = signboard(label, '#8a3a2a', '#fff', 2.8, 1.0); sg.position.set(0, 0, 2); g.add(sg)
+      put(g, d, off)
+      const q = side(d + 2, off - 1.5)
+      const npc = G.addActor('chaiwala'); npc.place(q.x, q.z, 0); npc.sfx = false
+    }
   }
   const sb = signboard('जंगल क्षेत्र · वन विभाग\nTiger / Leopard Zone', '#1f5a34', '#f2f0e0', 3, 1.2); put(sb, 560, 7.2)
   const sb2 = signboard('Petrol Pump 1 km →', '#1c3a6a', '#f4f0e0', 2.6, 1.0); put(sb2, 245, -9.8)

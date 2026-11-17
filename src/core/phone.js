@@ -62,7 +62,10 @@ export const phone = {
   refresh() {
     const G = this.G, t = fmtClock(G.time), sig = !!G.hasSignal, bat = this.battery()
     $('ph-time').textContent = t; $('ph-clock').textContent = t
-    $('ph-net').textContent = sig ? 'Network connected' : 'No service'
+    // A stopped clock is a story instrument: from 04:00 AM the phone freezes too.
+    $('ph-clock').classList.toggle('frozen', !!G.clockFrozen)
+    $('ph-net').textContent = sig ? 'Network connected · संपर्क hai' : 'No service · सिग्नल नहीं'
+    $('phone').classList.toggle('signal', sig)
     $('ph-sig').className = 'ph-sig' + (sig ? ' on' : '')
     $('ph-app-net').classList.toggle('off', !sig); $('ph-app-net-t').textContent = sig ? 'Network' : 'No signal'
     $('ph-app-time-t').textContent = t

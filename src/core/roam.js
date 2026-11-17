@@ -41,19 +41,26 @@ export function roamUpdate(G, dt) {
   if (G._strayT <= 0) { G._strayT = 0.25; G.stray = nearestCore(L, ref.x, ref.z).d }
   const d = G.stray || 0, lim = L.roam.stray
   G._wantBoost = clamp((d - lim * 0.45) / (lim * 0.55), 0, 1) * 0.55
-  if (d > lim * 0.6 && !G._warned) { G._warned = true; ui.toast('Raaste se bahut door... andhera ghana ho raha hai · Too far from the path, it is getting dark', 4) }
+  if (d > lim * 0.6 && !G._warned) { G._warned = true; ui.reason('Raaste se bahut door aa gaye — andhera aur ghana ho raha hai, wapas path pakdo') }
   if (d < lim * 0.4) G._warned = false
   if (d > lim && !G.pitCD) startPit(G, { x: ref.x, z: ref.z })
 }
 
 export function startCrash(G, pos) {
   if (G.pit || (G.pitCD || 0) > 0 || !G.level || !G.level.core || !G.player.canMove) return
-  startPit(G, pos || G.player.pos, 'crash')
+  const p = pos || G.player.pos, L = G.level
+  const surf = L && L.surface ? L.surface(p.x, p.z) : 'dirt'
+  const onRoad = surf === 'road' || surf === 'tile'
+  startPit(G, p, onRoad ? 'crash-road' : 'crash-offroad')
 }
 
 function startPit(G, pit, kind = 'pit') {
   const p = G.player, sc = G.scooter, ride = p.mode === 'ride' && !!sc
-  G.pit = { t: 0, stage: 0, ride, wasPush: !!p.push }
+  G.pit = { t: 0, stage: 0, ride, wasPush: !!p.push, kind }
+  if ((kind === 'crash-road' || kind === 'crash-offroad') && G.level.core && G.level.core[0]) {
+    const n = nearestCore(G.level, pit.x, pit.z)
+    G.pit.target = { x: n.x, z: n.z, pts: n.pts }
+  }
   p.canMove = false; G.keyBusy = false; p.vel = 0
   if (ride) {
     audio.st.engine = 0; audio.st.rpm = 0; sc.light(false); ui.show('speedo', false); p.mode = 'walk'
@@ -62,23 +69,32 @@ function startPit(G, pit, kind = 'pit') {
     if (G.comp && G.comp.attach) { const co = G.comp; co.attach = null; co.pose('stand'); co.place(pit.x + 1.4, pit.z + 1.0, 0) }
   }
   audio.fall(p.pos); audio.thud(p.pos, 0.8); G.camShake(1); ui.flash(0.7)
-  if (kind === 'crash') { audio.horn && audio.horn(p.pos, 'truck'); ui.caption('[tyres screech. A crash: metal, glass, shouting]', 3.4) } else ui.caption('[a hard fall into the dark]', 3)
+  if (kind && kind.indexOf('crash') === 0) { audio.horn && audio.horn(p.pos, 'truck'); ui.caption('[tyres screech. A crash: metal, glass, shouting]', 3.4) } else ui.caption('[a hard fall into the dark]', 3)
   G.bodyPose = 'fallen'; G.showBody = true; G._wantBoost = 0.7; G.pitCD = 25
   G.camOverride = { pos: new THREE.Vector3(p.pos.x + 3.4, 2.4, p.pos.z + 3.4), look: new THREE.Vector3(p.pos.x, 0.5, p.pos.z), fov: 58, snap: true }
 }
 
 function updatePit(G, dt) {
   const P = G.pit, p = G.player, sc = G.scooter, L = G.level; P.t += dt
-  const o = G.camOverride
+  // a story camera shot can clear camOverride mid-recovery — restore it so the pit scene never crashes
+  const o = G.camOverride || (G.camOverride = { pos: new THREE.Vector3(p.pos.x + 3.2, 2.2, p.pos.z + 3.2), look: new THREE.Vector3(p.pos.x, 0.6, p.pos.z), fov: 58, snap: true })
   if (P.stage === 0) {                     // lying in the pit
     p.vel = 0; o.look.set(p.pos.x, 0.5, p.pos.z)
     if (P.t > 2.4) {
+      if (P.kind === 'crash-road') {
+        // a passing rider helps you up and stands the bike back on its kickstand
+        const helper = G.addActor('farmer')
+        helper.place(p.pos.x + 1.5, p.pos.z + 1.2, 0); helper.pose('stand'); helper.sfx = false
+        if (sc) { sc.place(p.pos.x + 2.0, p.pos.z + 1.0, sc.yaw); sc.park(); sc.setStand && sc.setStand(true) }
+        caption('[A rider on a passing bike stops. "Sab theek ho? Pakdo mera haath." He pulls you up and stands the bike upright]', 5)
+        finishPit(G); return
+      }
       const n = nearestCore(L, p.pos.x, p.pos.z), dx = n.x - p.pos.x, dz = n.z - p.pos.z, dist = Math.hypot(dx, dz) || 1
       P.target = { x: n.x, z: n.z, pts: n.pts }; P.dir = { x: dx / dist, z: dz / dist }; P.dist = dist; P.dur = clamp(dist / 1.5, 5, 14); P.t1 = 0
       P.yaw = Math.atan2(P.dir.x, P.dir.z); p.yaw = P.yaw; G.bodyPose = null
       P.hauled = 0; P.t2 = 0; p.push = false
       if (sc) { sc.place(p.pos.x + P.dir.x * 1.1, p.pos.z + P.dir.z * 1.1, P.yaw); sc.chassis.quaternion.setFromEuler(0.05, P.yaw, 1.2) }   // the scooter lies on its side
-      ui.toast('Pehle scooter ko gaddhe se bahar kheencho... · Hauling the scooter out of the pit', 4)
+      ui.reason('Bike gaddhe mein phasi hai — pehle ise bahar kheencho, tabhi aage badhoge')
       P.stage = 1
     }
     return
@@ -122,6 +138,9 @@ function finishPit(G) {
   const yaw = ptAt(T.pts, projDist(T.pts, T.x, T.z)).yaw; p.yaw = yaw
   if (sc) { sc.place(T.x + Math.sin(yaw) * 1.3, T.z + Math.cos(yaw) * 1.3, yaw); if (!P.wasPush) sc.park(); sc.sync(0.016) }
   G._wantBoost = 0; G.pit = null
-  if (P.ride && sc) { G.mount(sc); ui.toast('Chabi lagi, scooter phir start · Key in, back on the road', 3.5) }
+  if (P.kind === 'crash-offroad' && sc) {
+    sc.park(); sc.setStand && sc.setStand(true)
+    ui.toast('Bike road ke kinare khadi hai — B se baitho ya G se dhakelo · Decide what to do', 5)
+  } else if (P.ride && sc) { G.mount(sc); ui.toast('Chabi lagi, scooter phir start · Key in, back on the road', 3.5) }
   else ui.toast('Wapas raaste par · Back on the path', 3)
 }

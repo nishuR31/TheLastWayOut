@@ -186,11 +186,26 @@ export const tex = {
   }),
   sign: (text, bg = '#c9a227', fg = '#1a1a1a', w = 512, h = 128, font = '700 64px "Noto Sans Devanagari", sans-serif') => {
     const c = mk(w, h), g = c.getContext('2d')
-    g.fillStyle = bg; g.fillRect(0, 0, w, h)
-    g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(6, 6, w - 12, h - 12)
-    g.fillStyle = fg; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'
-    const lines = text.split('\n'); lines.forEach((ln, i) => g.fillText(ln, w / 2, h / 2 + (i - (lines.length - 1) / 2) * 56))
-    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t
+    const [family, startPx] = [font.slice(font.indexOf('px') + 2).trim() || 'sans-serif', parseInt((font.match(/(\d+)px/) || [])[1] || '48', 10)]
+    const lines = text.split('\n')
+    const draw = () => {
+      g.clearRect(0, 0, w, h)
+      g.fillStyle = bg; g.fillRect(0, 0, w, h)
+      g.strokeStyle = fg; g.lineWidth = 6; g.strokeRect(6, 6, w - 12, h - 12)
+      g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle'
+      // shrink the type until the longest line fits the board (Devanagari strings are wide)
+      let px = startPx
+      do { g.font = font.replace(/\d+px/, px + 'px'); px -= 2 } while (px > 12 && Math.max(...lines.map(ln => g.measureText(ln).width)) > w - 28)
+      const step = Math.min(h / (lines.length + 0.7), px + 12)
+      lines.forEach((ln, i) => g.fillText(ln, w / 2, h / 2 + (i - (lines.length - 1) / 2) * step))
+    }
+    draw()
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4
+    // web fonts load asynchronously — redraw once they are ready so the sign is never tofu boxes
+    if (typeof document !== 'undefined' && document.fonts && !document.fonts.check(font)) {
+      document.fonts.ready.then(() => { draw(); t.needsUpdate = true }).catch(() => {})
+    }
+    return t
   },
   cloth: (a, b, kind = 'check') => once('cl' + a + b + kind, () => {
     const c = mk(128, 128), g = c.getContext('2d')

@@ -46,11 +46,29 @@ function headTexture(o) {
   return tex.face({ skin: o.skin, male: !o.female, ...o.face })
 }
 
+// cheap seeded variety for crowds: height, build, skin and clothing from a few palettes
+export function makeVariety(seed = Math.random() * 1e9) {
+  let s = (seed >>> 0) || 1
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296)
+  const pick = (a) => a[Math.floor(rnd() * a.length)]
+  return {
+    h: 1.5 + rnd() * 0.42,
+    fat: 0.86 + rnd() * 0.32,
+    skin: pick(['#8d5b3b', '#a46d49', '#9a6544', '#7a4a30', '#b07c55', '#6f462b']),
+    top: pick([['#27424a', '#8aa0a6', 'check'], ['#b5532a', '#d9a06a', 'stripe'], ['#3a5a3a', '#9aa87a', 'check'], ['#6a3a5a', '#b090a0', 'stripe'], ['#4a4a52', '#9a9aa0', 'check']]),
+    bottom: pick(['#2a3f66', '#6d6347', '#333333', '#4a3a2a']),
+    glasses: rnd() < 0.18
+  }
+}
+export function makeRandomPerson(seed) { return makePerson('nishan', makeVariety(seed)) }
+
 export function makePerson(name, over = {}) {
   const o = { ...(OUTFITS[name] || OUTFITS.nishan), ...over }
   const H = o.h, sc = H / 1.74, thin = o.thin || 1
+  const fat = o.fat || 1
   const legL = 0.88 * sc, torsoL = 0.56 * sc, neck = 0.07 * sc
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body)
+  body.scale.set(fat, 1, fat) // build variety: heavier / slimmer silhouette with one parameter
   const skinM = M({ color: o.skin, roughness: 0.7 })
   const topTex = o.saree ? tex.saree(o.saree[0], o.saree[1]) : (o.top ? tex.cloth(o.top[0], o.top[1], o.top[2]) : null)
   const topM = M({ map: topTex, color: 0xffffff, roughness: 0.95 })
@@ -126,7 +144,15 @@ export function makePerson(name, over = {}) {
   const P = {
     root, body, hips, torso, headG, arms, legs, o, sc, legL, mouthM, mouth: 0, phase: 0, speed: 0, pose: 'stand', crouch: 0, lookY: 0, lookX: 0, tremble: 0, held: null, t: Math.random() * 10, headR,
     setPose(p) { this.pose = p },
-    hold(obj, side = 1, off = [0, -0.3, 0.12]) { if (this.held) this.held.parent && this.held.parent.remove(this.held); this.held = obj; if (obj) { arms[side > 0 ? 1 : 0].el.add(obj); obj.position.set(...off.map(v => v * sc)) } },
+    hold(obj, side = 1, off = [0, -0.3, 0.12]) {
+      if (this.held) this.held.parent && this.held.parent.remove(this.held)
+      this.held = obj
+      if (obj) {
+        arms[side > 0 ? 1 : 0].el.add(obj)
+        obj.position.set(...off.map(v => v * sc))
+        this._holdBase = obj.position.clone()
+      } else this._holdBase = null
+    },
     update(dt, speed = 0) {
       if (mouthM) { const m = this.mouth; mouthM.visible = m > 0.06; mouthM.scale.y = 0.12 + clamp(m * 2.6, 0, 1) * 1.1 }
       this.t += dt; this.speed = damp(this.speed, speed, 8, dt)
@@ -134,7 +160,7 @@ export function makePerson(name, over = {}) {
       const idleB = Math.sin(this.t * 1.7) * 0.012
       let hipY = legL, tilt = 0, la = 0, ra = 0, lk = 0, rk = 0, la_el = 0.12, ra_el = 0.12, sit = 0
       const pose = this.pose
-      if (pose === 'sit' || pose === 'pillion') sit = 1
+      if (pose === 'sit' || pose === 'pillion' || pose === 'sit_eat' || pose === 'sit_drink') sit = 1
       if (sp > 0.05 && !sit) {
         const sw = Math.sin(ph) * 0.62 * w, sw2 = Math.sin(ph + Math.PI) * 0.62 * w
         legs[0].hp.rotation.x = sw; legs[1].hp.rotation.x = sw2
@@ -162,13 +188,54 @@ export function makePerson(name, over = {}) {
       if (pose === 'strike') { const k = (this.t * 1.6) % 1; const up = k < 0.55 ? k / 0.55 : 1 - (k - 0.55) / 0.12; arms.forEach(a => { a.sh.rotation.x = -(0.4 + 2.1 * clamp(up, 0, 1)); a.el.rotation.x = -0.3 }); tilt = 0.25 - clamp(up, 0, 1) * 0.5 }
       if (pose === 'point') { arms[1].sh.rotation.x = -1.55; arms[1].el.rotation.x = -0.05 }
       if (pose === 'push') { arms.forEach(a => { a.sh.rotation.x = -1.0; a.el.rotation.x = -0.35 }); tilt = 0.18 }
+      if (pose === 'steer') { // walking the bike, both hands on the handlebars
+        arms.forEach((a, i) => { a.sh.rotation.x = -1.2; a.sh.rotation.z = (i ? -1 : 1) * 0.14; a.el.rotation.x = -0.3 })
+        tilt = 0.06
+      }
       if (pose === 'rub') { arms.forEach((a, i) => { a.sh.rotation.x = -0.9 + Math.sin(this.t * 7 + i) * 0.1; a.el.rotation.x = -1.7; a.sh.rotation.z = (i ? 1 : -1) * 0.5 }); tilt = 0.12 }
+      // ---- everyday life: eating, drinking, handing things over ------------
+      // Hand-to-mouth cycles are deliberately small: food is a warm, ordinary
+      // beat, not a performance. The chew is applied after head look below.
+      this._bite = 0
+      if (pose === 'eat' || pose === 'bite' || pose === 'sit_eat') {
+        const cyc = (this.t * 1.35) % 1
+        this._bite = cyc < 0.45 ? Math.sin((cyc / 0.45) * Math.PI) : 0
+        arms[1].sh.rotation.x = (sit ? -0.35 : -0.62) - this._bite * 0.85
+        arms[1].el.rotation.x = (sit ? -0.9 : -1.15) - this._bite * 0.7
+        tilt = 0.03
+      }
+      if (pose === 'sip' || pose === 'sit_drink') {
+        const cyc = (this.t * 0.7) % 1
+        const lift = cyc < 0.5 ? Math.sin((cyc / 0.5) * Math.PI) : 0
+        this._bite = lift * 0.5
+        arms[1].sh.rotation.x = (sit ? -0.35 : -0.7) - lift * 0.55
+        arms[1].el.rotation.x = (sit ? -0.9 : -1.35) - lift * 0.5
+      }
+      if (pose === 'offer') { arms[1].sh.rotation.x = -1.0; arms[1].el.rotation.x = -0.55; tilt = 0.04 }
+      if (pose === 'photo') { arms.forEach(a => { a.sh.rotation.x = -1.5; a.el.rotation.x = -1.05 }) }
+      if (pose === 'wave') { arms[1].sh.rotation.x = -2.4; arms[1].sh.rotation.z = -0.4 + Math.sin(this.t * 9) * 0.22; arms[1].el.rotation.x = -0.2 }
+      if (pose === 'hold_hand') { arms.forEach((a, i) => { a.sh.rotation.x = -0.5; a.sh.rotation.z = (i ? -1 : 1) * 0.28; a.el.rotation.x = -0.7 }) }
       if (pose === 'fallen') { body.rotation.z = lerp(body.rotation.z, 1.5, 0.08); hipY = 0.2 }
       else body.rotation.z = lerp(body.rotation.z, 0, 0.12)
       if (this.tremble > 0) { const tr = this.tremble; torso.rotation.z = Math.sin(this.t * 38) * 0.02 * tr; arms.forEach(a => { a.sh.rotation.z += Math.sin(this.t * 41) * 0.02 * tr }) }
       else torso.rotation.z *= 0.8
       hips.position.y = hipY + idleB; hips.rotation.x = tilt * 0.5; torso.rotation.x = tilt * 0.6
+      // subtle life: breathing and a slow idle sway, stronger when standing still
+      const breath = Math.sin(this.t * 1.9) * 0.016 * (1 - w * 0.5)
+      torso.scale.set(1 + breath, 1 + breath * 0.7, 1 + breath) // body group already carries the fat factor
+      headG.rotation.z = Math.sin(this.t * 0.85) * 0.018 * (1 - w)
+      headG.position.y = torsoL + neck + Math.sin(this.t * 1.9 + 0.5) * 0.006
       headG.rotation.y = damp(headG.rotation.y, clamp(this.lookY, -1.1, 1.1), 7, dt); headG.rotation.x = damp(headG.rotation.x, clamp(this.lookX, -0.6, 0.6) - tilt * 0.5, 7, dt)
+      if (this._bite > 0.4) {
+        headG.rotation.x += this._bite * 0.13
+        if (mouthM) { mouthM.visible = true; mouthM.scale.y = 0.5 + Math.sin(this.t * 14) * 0.22 }
+      }
+      // The held cup/biscuit rides the hand up to the mouth instead of hanging
+      // at a fixed offset — the object is part of the gesture, not just carried.
+      if (this.held && this._holdBase) {
+        if (this._bite > 0) this.held.position.set(this._holdBase.x, this._holdBase.y + this._bite * 0.07 * sc, this._holdBase.z - this._bite * 0.06 * sc)
+        else this.held.position.lerp(this._holdBase, Math.min(1, dt * 6))
+      }
     }
   }
   return P

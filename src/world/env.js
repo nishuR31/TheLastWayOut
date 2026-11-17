@@ -50,12 +50,35 @@ export class Env {
     for (let i = 0; i < this.rainN; i++) { this.rainSeed[i * 3] = R.range(-14, 14); this.rainSeed[i * 3 + 1] = R.range(0, 14); this.rainSeed[i * 3 + 2] = R.range(-14, 14) }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(pos, 3))
     this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xaab8cc, transparent: true, opacity: 0.35, depthWrite: false })); this.rain.frustumCulled = false; sc.add(this.rain)
+    // jagged lightning bolt, shown for a fraction of a second on each strike
+    const bp = []; for (let i = 0; i < 10; i++) bp.push(new THREE.Vector3())
+    this.boltGeo = new THREE.BufferGeometry().setFromPoints(bp)
+    this.bolt = new THREE.Line(this.boltGeo, new THREE.LineBasicMaterial({ color: 0xe8f2ff, transparent: true, opacity: 0, depthWrite: false }))
+    this.bolt.visible = false; this.bolt.frustumCulled = false; sc.add(this.bolt)
     this.rainT = 0; this.flashV = 0; this.nextBolt = 99; this.lightning = false; this.gust = 0; this.gustT = 3; this.windV = 0; this.rainAmt = 0
     this.set('day', true)
   }
   set(name, instant = false) { this.name = name; this.mood = MOODS[name] || MOODS.day; if (instant) { this._snap = true } }
   get raining() { return this.rainAmt > 0.08 }
-  strike(dist = 1) { this.flashV = 1; this.G.audio.thunder(dist); setTimeout(() => { this.flashV = 0.7 }, 120); }
+  strike(dist = 1, camPos) {
+    this.flashV = 1
+    this.G.audio.thunder(dist)
+    if (camPos && this.bolt) {
+      const c = camPos, x = c.x + R.range(-30, 30), z = c.z + R.range(-30, 30)
+      const a = this.boltGeo.attributes.position.array
+      for (let i = 0; i < 10; i++) {
+        const t = i / 9
+        a[i * 3] = x + Math.sin(i * 2.7) * (1 - t) * 3.5
+        a[i * 3 + 1] = 70 * (1 - t)
+        a[i * 3 + 2] = z + Math.cos(i * 2.3) * (1 - t) * 3.5
+      }
+      this.boltGeo.attributes.position.needsUpdate = true
+      this.bolt.material.opacity = 0.9; this.bolt.visible = true
+      clearTimeout(this._boltT)
+      this._boltT = setTimeout(() => { this.bolt.visible = false }, 170)
+    }
+    setTimeout(() => { this.flashV = 0.7 }, 120)
+  }
   update(dt, camPos) {
     const m = this.mood, c = this.cur, k = this._snap ? 1 : 1 - Math.exp(-dt * 0.55)
     this._snap = false
@@ -72,7 +95,7 @@ export class Env {
     // gusts
     this.gustT -= dt; if (this.gustT <= 0) { this.gustT = R.range(3, 9) / (0.3 + c.wind * 2); this.gustTarget = R.range(0.2, 0.6) * (0.3 + c.wind * 1.5) } if (this.gustTarget !== undefined) { this.gust = damp(this.gust, this.gustTarget, 1.2, dt); this.gustTarget *= Math.exp(-dt * 0.45) }
     // lightning during storm
-    if (this.name === 'storm') { this.nextBolt -= dt; if (this.nextBolt <= 0) { this.nextBolt = R.range(14, 34); this.strike(R.range(0.8, 2.2)) } } else this.nextBolt = Math.min(this.nextBolt, 12)
+    if (this.name === 'storm') { this.nextBolt -= dt; if (this.nextBolt <= 0) { this.nextBolt = R.range(14, 34); this.strike(R.range(0.8, 2.2), camPos) } } else this.nextBolt = Math.min(this.nextBolt, 12)
     this.flashV = Math.max(0, this.flashV - dt * 3); this.skyMat.uniforms.flash.value = this.flashV * (this.G.cfg.reduceFlash ? 0.25 : 1)
     // rain geometry
     const on = c.rain > 0.04 && !this.indoors; this.rain.visible = on

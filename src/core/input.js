@@ -1,6 +1,6 @@
 // Unified keyboard / mouse (pointer lock, drag fallback) / touch input
 export const input = {
-  keys: {}, pressed: new Set(), dx: 0, dy: 0, locked: false, enabled: false, touch: false,
+  keys: {}, pressed: new Set(), clicked: false, dx: 0, dy: 0, locked: false, enabled: false, touch: false,
   joy: { x: 0, y: 0 }, sens: 1, canvas: null, drag: false, noLock: false,
   down(code) { return !!this.keys[code] },
   hit(code) { return this.pressed.has(code) },
@@ -15,6 +15,7 @@ export const input = {
     return { x, y }
   },
   consumeLook() { const r = { x: this.dx, y: this.dy }; this.dx = 0; this.dy = 0; return r },
+  consumeClick() { const v = this.clicked; this.clicked = false; return v },
   endFrame() { this.pressed.clear() },
   init(canvas, hooks) {
     this.canvas = canvas; this.hooks = hooks
@@ -40,7 +41,7 @@ export const input = {
       if (!this.enabled) return
       if (this.locked || this.drag) { this.dx += e.movementX; this.dy += e.movementY }
     })
-    canvas.addEventListener('mousedown', () => { if (!this.enabled) return; this.drag = true; this.lock() })
+    canvas.addEventListener('mousedown', (e) => { if (!this.enabled) return; if (e.button === 0) this.clicked = true; this.drag = true; this.lock() })
     addEventListener('mouseup', () => { this.drag = false })
     this.setupTouch()
   },

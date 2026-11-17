@@ -12,7 +12,8 @@ export function build(G, opts = {}) {
   const toLight = [[0, 176], [-2, 200], [-6, 226]]
   const away = [[3, 162], [12, 140], [-28, 120], [-70, 150], [-74, 200], [-46, 242]]
   const village = [[-46, 242], [-40, 276], [-30, 312], [-22, 346]]
-  const L = forestLevel(G, { name: 'night', trails: [{ pts: walk, hw: 1.5, name: 'walk' }, { pts: toLight, hw: 1.5, name: 'toLight' }, { pts: away, hw: 1.5, name: 'away' }, { pts: village, hw: 1.6, name: 'village' }], bounds: [-130, -30, 70, 380], density: 0.026, seed: 41, groundSize: [400, 520, -30, 170], avoid: [{ x: 0, z: 170, r: 12 }, { x: 0, z: -10, r: 4 }], groundColor: 0xb4bcae })
+  // wider rideable trails so the bike can actually turn without constantly shoving trees
+  const L = forestLevel(G, { name: 'night', trails: [{ pts: walk, hw: 2.8, name: 'walk' }, { pts: toLight, hw: 2.8, name: 'toLight' }, { pts: away, hw: 2.8, name: 'away' }, { pts: village, hw: 2.8, name: 'village' }], bounds: [-130, -30, 70, 380], density: 0.026, seed: 41, groundSize: [400, 520, -30, 170], avoid: [{ x: 0, z: 170, r: 12 }, { x: 0, z: -10, r: 4 }], groundColor: 0xb4bcae })
   const T = (n) => L.trails.find(t => t.name === n)
   L.walkPts = T('walk').pts; L.awayPts = T('away').pts; L.toLightPts = T('toLight').pts; L.villagePts = T('village').pts
   clearing(L, 0, 170, 8.5, 'peepalC', 'mud', 5)
@@ -45,7 +46,7 @@ export function build(G, opts = {}) {
   const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 0.7, 8), new THREE.MeshStandardMaterial({ color: '#3a2c1e', roughness: 1 })); stump.position.set(2.4, 0.35, 60); L.add(stump); L.walk.circle(2.4, 60, 0.5)
   const hand = new THREE.Mesh(new THREE.CircleGeometry(0.16, 8), new THREE.MeshBasicMaterial({ color: '#1a120a', transparent: true, opacity: 0.8 })); hand.rotation.x = -Math.PI / 2; hand.position.set(1.4, 0.03, 60.4); hand.scale.set(0.8, 1.1, 1); L.add(hand); L.refs.stumpPos = new THREE.Vector3(2.4, 0.5, 60)
   L.spawn = { x: 0, z: -6, yaw: 0 }
-  L.surface = () => 'mud'
+  L.surface = () => 'dirt' // rideable forest floor — mud is only visual in the low patches
   nightTick(L, G, { owl: 0.6, dog: 0.3, jackal: 0.4 })
   return L
 }

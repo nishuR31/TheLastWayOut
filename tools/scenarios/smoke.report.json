@@ -1,0 +1,382 @@
+{
+  "scenario": "tools/scenarios/smoke.json",
+  "steps": 14,
+  "failedSteps": 0,
+  "failedChecks": [],
+  "errors": [],
+  "verdict": "PASS",
+  "results": [
+    {
+      "step": 1,
+      "action": "eval",
+      "ok": true,
+      "out": "playing chapter 0 branch b",
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 2,
+      "action": "wait",
+      "ok": true,
+      "out": "waited 2500ms",
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 3,
+      "action": "check",
+      "ok": true,
+      "out": {
+        "name": "renderer-ready",
+        "ok": true,
+        "detail": "WebGL2 renderer created"
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 4,
+      "action": "check",
+      "ok": true,
+      "out": {
+        "name": "level-loaded",
+        "ok": true,
+        "detail": "road"
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 5,
+      "action": "screenshot",
+      "ok": true,
+      "out": {
+        "file": "shots/smoke-ch1.png",
+        "bytes": 324799
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 6,
+      "action": "eval",
+      "ok": true,
+      "out": {
+        "ready": true,
+        "running": true,
+        "paused": false,
+        "stopped": false,
+        "level": "road",
+        "clock": 10.287,
+        "chapter": null,
+        "player": {
+          "x": -2.2,
+          "z": -0.5,
+          "yaw": -2.36,
+          "mode": "walk",
+          "crouch": 0
+        },
+        "camera": {
+          "x": 0.923,
+          "y": 2.047,
+          "z": 2.129
+        },
+        "scooter": {
+          "x": -1.6,
+          "z": 5.006,
+          "speed": -0.141,
+          "parked": true
+        },
+        "goal": null,
+        "interacts": [],
+        "fear": 0,
+        "tired": 0,
+        "flags": {},
+        "render": {
+          "calls": 147,
+          "triangles": 581820
+        },
+        "autoplay": true,
+        "fastSim": 6,
+        "eventCount": 4,
+        "errorCount": 0
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 7,
+      "ok": true,
+      "out": "resolved 0 interacts"
+    },
+    {
+      "step": 8,
+      "action": "wait",
+      "ok": true,
+      "out": "waited 800ms",
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 9,
+      "action": "press",
+      "ok": true,
+      "out": "pressed KeyW for 1200ms",
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 10,
+      "action": "eval",
+      "ok": true,
+      "out": {
+        "ready": true,
+        "running": true,
+        "paused": false,
+        "stopped": false,
+        "level": "road",
+        "clock": 10.307,
+        "chapter": null,
+        "player": {
+          "x": -2.2,
+          "z": -0.5,
+          "yaw": -2.36,
+          "mode": "walk",
+          "crouch": 0
+        },
+        "camera": {
+          "x": 0.086,
+          "y": 1.891,
+          "z": 1.428
+        },
+        "scooter": {
+          "x": -1.6,
+          "z": 5.161,
+          "speed": 0.8,
+          "parked": true
+        },
+        "goal": null,
+        "interacts": [],
+        "fear": 0,
+        "tired": 0,
+        "flags": {},
+        "render": {
+          "calls": 132,
+          "triangles": 581822
+        },
+        "autoplay": true,
+        "fastSim": 6,
+        "eventCount": 5,
+        "errorCount": 0
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 11,
+      "action": "check",
+      "ok": true,
+      "out": {
+        "name": "no-page-errors",
+        "ok": true,
+        "detail": "0 error/rejection events"
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 12,
+      "action": "check",
+      "ok": true,
+      "out": {
+        "name": "player-position-finite",
+        "ok": true,
+        "detail": "{\"x\":-2.2,\"z\":-0.5,\"yaw\":-2.36,\"mode\":\"walk\",\"crouch\":0}"
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 13,
+      "action": "check",
+      "ok": true,
+      "out": {
+        "name": "camera-position-finite",
+        "ok": true,
+        "detail": "{\"x\":0.086,\"y\":1.891,\"z\":1.428}"
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    },
+    {
+      "step": 14,
+      "action": "eval",
+      "ok": true,
+      "out": {
+        "state": {
+          "ready": true,
+          "running": true,
+          "paused": false,
+          "stopped": false,
+          "level": "road",
+          "clock": 10.307,
+          "chapter": null,
+          "player": {
+            "x": -2.2,
+            "z": -0.5,
+            "yaw": -2.36,
+            "mode": "walk",
+            "crouch": 0
+          },
+          "camera": {
+            "x": 0.086,
+            "y": 1.891,
+            "z": 1.428
+          },
+          "scooter": {
+            "x": -1.6,
+            "z": 5.161,
+            "speed": 0.8,
+            "parked": true
+          },
+          "goal": null,
+          "interacts": [],
+          "fear": 0,
+          "tired": 0,
+          "flags": {},
+          "render": {
+            "calls": 132,
+            "triangles": 581822
+          },
+          "autoplay": true,
+          "fastSim": 6,
+          "eventCount": 5,
+          "errorCount": 0
+        },
+        "checks": [
+          {
+            "name": "renderer-ready",
+            "ok": true,
+            "detail": "WebGL2 renderer created"
+          },
+          {
+            "name": "no-page-errors",
+            "ok": true,
+            "detail": "0 error/rejection events"
+          },
+          {
+            "name": "player-position-finite",
+            "ok": true,
+            "detail": "{\"x\":-2.2,\"z\":-0.5,\"yaw\":-2.36,\"mode\":\"walk\",\"crouch\":0}"
+          },
+          {
+            "name": "camera-position-finite",
+            "ok": true,
+            "detail": "{\"x\":0.086,\"y\":1.891,\"z\":1.428}"
+          },
+          {
+            "name": "scooter-state-finite",
+            "ok": true,
+            "detail": "{\"x\":-1.6,\"z\":5.161,\"speed\":0.8,\"parked\":true}"
+          },
+          {
+            "name": "draw-calls-positive",
+            "ok": true,
+            "detail": "{\"calls\":132,\"triangles\":581822}"
+          },
+          {
+            "name": "level-loaded",
+            "ok": true,
+            "detail": "road"
+          }
+        ],
+        "errors": [],
+        "recent": [
+          {
+            "n": 1,
+            "t": 1794930050846,
+            "type": "harness-ready",
+            "version": "1.0.0"
+          },
+          {
+            "n": 2,
+            "t": 1794930053801,
+            "type": "level",
+            "name": "road"
+          },
+          {
+            "n": 3,
+            "t": 1794930066980,
+            "type": "command",
+            "name": "teleport",
+            "args": [
+              "5",
+              "5"
+            ],
+            "result": "teleported 5,5"
+          },
+          {
+            "n": 4,
+            "t": 1794930084116,
+            "type": "command",
+            "name": "play",
+            "args": [
+              0,
+              "b"
+            ],
+            "result": "playing chapter 0 branch b"
+          },
+          {
+            "n": 5,
+            "t": 1794930087978,
+            "type": "command",
+            "name": "skip",
+            "args": [],
+            "result": "resolved 0 interacts"
+          }
+        ]
+      },
+      "state": {
+        "level": "road",
+        "goal": null,
+        "errors": 0
+      }
+    }
+  ]
+}

@@ -5,8 +5,13 @@ import { ui } from '../core/ui.js'
 import { audio } from '../core/audio.js'
 import { unlock } from '../reality.js'
 import { ptAt, projDist } from '../world/common.js'
+import { horror } from '../core/horror.js'
 
 export { G, ui, audio, THREE }
+// Horror beat hooks for story scripts (the director also runs itself by level).
+export const dread = (v = 0.3) => horror.kick(v)
+export const scare = (kind = 'sting', intensity = 1) => horror.scare(kind, intensity)
+export const apparition = (kind = 'shadow', opts = {}) => horror.apparition(kind, opts)
 export const wait = (s) => G.wait(s)
 export const N = (hi, en, o) => ui.say('Nishan', hi, en, o)
 export const T = (hi, en, o) => ui.say('Nishant', hi, en, o)       // Nishant (companion)

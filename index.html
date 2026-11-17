@@ -2,7 +2,7 @@
 <html lang="hi">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>The Last Way Out — आख़िरी रास्ता</title>
 </head>
 <body>
@@ -10,8 +10,24 @@
 
 <div id="vignette" class="layer"></div>
 <div id="fear" class="layer"></div>
+<div id="dread" class="layer"></div>
+<div id="helmetvision" class="layer"></div>
+<div id="visor"></div>
+<div id="scare-flash" class="layer"></div>
 <div id="grain" class="layer"></div>
 <div id="flash" class="layer"></div>
+
+<!-- SPLASH -->
+<div id="splash">
+  <div class="sp-inner">
+    <div class="sp-rule sp-rule-t"></div>
+    <div class="sp-kicker">A GROUNDED PSYCHOLOGICAL HORROR STORY</div>
+    <div class="sp-title">THE LAST WAY OUT</div>
+    <div class="sp-hindi">आख़िरी रास्ता</div>
+    <div class="sp-rule sp-rule-b"></div>
+    <div class="sp-skip">click or press any key to skip</div>
+  </div>
+</div>
 
 <!-- HUD -->
 <div id="hud" class="hidden">
@@ -25,17 +41,18 @@
   <div id="stam"><i></i></div>
   <div id="objective"><small>OBJECTIVE · लक्ष्य</small><span id="objective-t"></span><em id="objective-d"></em></div>
   <div id="compass"><canvas id="compass-c" width="720" height="48"></canvas><div id="compass-t"></div></div>
-  <div id="minimap-w"><canvas id="minimap" width="340" height="340"></canvas><div id="minimap-hint"><kbd>M</kbd> map · <kbd>H</kbd> madad</div></div>
+  <div id="minimap-w"><canvas id="minimap" width="340" height="340"></canvas><div id="minimap-hint"><kbd>M</kbd> map · <kbd>H</kbd> madad · <kbd>Tab</kbd> keys</div></div>
   <div id="wp"><i></i><b id="wp-d"></b></div>
-  <div id="twigs"></div>
   <div id="phone"></div>
   <div id="speedo" class="hidden"><b id="speedo-v">0</b><small>km/h</small></div>
+  <div id="keyaid"></div>
+  <div id="keycard"></div>
 </div>
 
 <div id="choice" class="hidden"><div id="choice-q"></div><div id="choice-opts"></div></div>
 <div id="titlecard" class="hidden"><div id="tc-chapter"></div><div id="tc-title"></div><div id="tc-time"></div></div>
 <div id="fade" class="layer"></div>
-<div id="loading" class="hidden"><div class="ld-t">THE LAST WAY OUT</div><div class="ld-bar"><i></i></div><div class="ld-s">loading…</div></div>
+<div id="loading" class="hidden"><div class="ld-t">THE LAST WAY OUT</div><div class="ld-bar"><i></i></div><div class="ld-s">loading…</div><div class="ld-tip rot-tip" id="loading-tip"></div></div>
 <div id="dbg" class="hidden"></div>
 
 <!-- touch controls -->
@@ -45,6 +62,38 @@
   <button id="b-run">RUN</button><button id="b-torch">TORCH</button><button id="b-use">USE</button><button id="b-pause">II</button><button id="b-map">MAP</button><button id="b-help">HELP</button>
 </div>
 
+<!-- CHARACTER SELECT -->
+<div id="charscreen" class="screen">
+  <div class="cs-inner">
+    <div class="cs-kicker">THE LAST WAY OUT</div>
+    <h2 class="cs-title">CHOOSE YOUR CHARACTER</h2>
+    <div class="cs-sub">आप कौन होगे? · Who will you play as?</div>
+    <div class="cs-stage">
+      <canvas id="char-preview"></canvas>
+      <div class="cs-caption">
+        <b id="cs-name">NISHAN</b>
+        <span id="cs-trait">observant · questions the strange</span>
+      </div>
+    </div>
+    <div class="cs-cards">
+      <button type="button" class="cs-card selected" id="cs-nishan" data-char="Nishan">
+        <span class="char-avatar av-nishan">N</span>
+        <span class="cs-details"><b>NISHAN</b><small>hears things first · questions the strange</small></span>
+      </button>
+      <button type="button" class="cs-card" id="cs-nishant" data-char="Nishant">
+        <span class="char-avatar av-nishant">N</span>
+        <span class="cs-details"><b>NISHANT</b><small>observant · sees things first</small></span>
+      </button>
+    </div>
+    <div class="cs-actions">
+      <button id="cs-back" class="cs-back hidden">← BACK TO MENU</button>
+      <button id="cs-next" class="primary cs-next">CONTINUE <kbd>Enter</kbd></button>
+    </div>
+    <div class="cs-foot">Your choice sets which friend you control; the other becomes your companion.</div>
+    <div class="cs-tip rot-tip" id="cs-tip"></div>
+  </div>
+</div>
+
 <!-- MENU -->
 <div id="menu" class="screen">
   <div class="menu-inner">
@@ -52,15 +101,18 @@
     <h1>THE LAST WAY OUT</h1>
     <h2>आख़िरी रास्ता</h2>
     <div class="menu-sub">Nishan &amp; Nishant went out for a ride. Most of what happened that night has an explanation.<br/>Not all of it.</div>
+    <div class="menu-char">Playing as <b id="menu-char-name">Nishan</b> · <button type="button" id="m-char" class="linkbtn">change character</button></div>
     <div class="menu-btns">
-      <button id="m-start" class="primary"><span>▶ &nbsp;New Game</span><kbd>N</kbd></button>
+      <button id="m-start" class="primary"><span><svg class="btn-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5 13 8l-9 5.5z"/></svg>New Game</span><kbd>N</kbd></button>
       <button id="m-chapters"><span>Chapters</span><kbd>C</kbd></button>
       <button id="m-log"><span>Reality Log <small id="m-log-n"></small></span><kbd>R</kbd></button>
       <button id="m-settings"><span>Settings</span><kbd>S</kbd></button>
       <button id="m-controls"><span>Keys &amp; Controls</span><kbd>K</kbd></button>
+      <button id="m-char-btn"><span>Change Character</span><kbd>V</kbd></button>
       <button id="m-quit" class="hidden"><span>Quit</span><kbd>Q</kbd></button>
     </div>
     <div class="menu-foot">Best with headphones &amp; lights off · Press the highlighted letter or click · <kbd>I</kbd> inventory in game</div>
+    <div class="menu-tip rot-tip" id="menu-tip"></div>
   </div>
 </div>
 
@@ -86,6 +138,8 @@
   <label>Subtitle size <input type="range" id="s-subsz" min="0.8" max="1.6" step="0.1" value="1"></label>
   <label>Navigation aid
     <select id="s-nav"><option value="full">Minimap + compass + waypoint</option><option value="compass">Compass + waypoint only</option><option value="off">Off (objective text only)</option></select></label>
+  <label>Action hints
+    <select id="s-keyaid"><option value="context">Contextual (recommended)</option><option value="always">Always visible</option><option value="off">Off</option></select></label>
   <label>Reduce camera shake <input type="checkbox" id="s-shake"></label>
   <label>Reduce flashing <input type="checkbox" id="s-flash"></label>
   <button class="back"><span>← Back</span><kbd>B</kbd></button>
@@ -94,17 +148,21 @@
 <div id="controls" class="screen hidden"><div class="panel">
   <h3>Controls</h3>
   <table class="keys">
-    <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Walk (on the scooter: throttle / steer / brake)</td></tr>
+    <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Walk (on the bike: throttle / steer / brake)</td></tr>
     <tr><td>Mouse</td><td>Look around</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>W</kbd></td><td>Run (you will get tired). While pushing the scooter: your friend joins in; two people push about twice as fast as one</td></tr>
-    <tr><td><kbd>Shift</kbd></td><td>Crouch / hide (hold, without W)</td></tr>
-    <tr><td><kbd>C</kbd></td><td>Switch first-person / third-person camera</td></tr>
-    <tr><td><kbd>F</kbd></td><td>Flashlight on / off. While you push the scooter it switches the bike's headlight instead of the phone</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>W</kbd></td><td>Run (you will get tired). While pushing the bike: your friend joins in; two people push about twice as fast as one</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Crouch / hide (hold)</td></tr>
+    <tr><td><kbd>X</kbd></td><td>Switch first-person / third-person camera</td></tr>
+    <tr><td><kbd>F</kbd></td><td>Flashlight on / off. While you push the bike it switches the bike's headlight instead of the phone</td></tr>
     <tr><td><kbd>E</kbd></td><td>Interact · at any table: leave / pick up your phone and key</td></tr>
     <tr><td><kbd>E</kbd></td><td>Pick up twigs · at a fire-pit: light it (2 twigs) or feed it</td></tr>
     <tr><td><kbd>T</kbd></td><td>Build a fire where you stand (3 twigs). Warmth eases tiredness and fear</td></tr>
-    <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>Push the scooter by hand (rough ground) · <kbd>B</kbd> to ride it</td></tr>
-    <tr><td><kbd>B</kbd></td><td>Scooter: get on and start it (needs the key) · switch off and get off</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>E</kbd></td><td>Put an item back (key / phone / helmet)</td></tr>
+    <tr><td>Left click (while riding)</td><td>Horn</td></tr>
+    <tr><td><kbd>E</kbd> (while riding)</td><td>Start / stop the engine</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>Near the bike: hang the helmet on the rear holder by its chin strap, or take it back</td></tr>
+    <tr><td><kbd>G</kbd></td><td>Push the bike by hand (rough ground) · <kbd>B</kbd> to ride it</td></tr>
+    <tr><td><kbd>B</kbd></td><td>Bike: get on and start it (needs the key) · switch off and get off</td></tr>
     <tr><td><kbd>I</kbd></td><td>Inventory: phone, key, helmets, twigs, matches, plug, petrol... (also in the pause menu)</td></tr>
     <tr><td><kbd>P</kbd></td><td>Phone on / off (bottom-right: time, network, flashlight, settings, menu)</td></tr>
     <tr><td><kbd>M</kbd></td><td>Open the map (shows where you are, which way you face, and where to go)</td></tr>
@@ -140,7 +198,7 @@
   <div class="map-head"><h3 id="map-title">Naksha · Map</h3><div id="map-obj"></div></div>
   <div class="map-body"><canvas id="map-c" width="1000" height="640"></canvas>
     <div class="map-side">
-      <div class="map-legend"><p><i class="lg you"></i> Aap · You (arrow = jis taraf dekh rahe ho)</p><p><i class="lg goal"></i> Manzil · Where to go</p><p><i class="lg route"></i> Raasta · Suggested route</p><p><i class="lg comp"></i> Nishant</p><p><i class="lg sc"></i> Scooter</p></div>
+      <div class="map-legend"><p><i class="lg you"></i> Aap · You (arrow = jis taraf dekh rahe ho)</p><p><i class="lg goal"></i> Manzil · Where to go</p><p><i class="lg route"></i> Raasta · Suggested route</p><p><i class="lg comp"></i> Nishant</p><p><i class="lg sc"></i> Bike</p></div>
       <div class="map-btns"><button id="map-zi">＋ Zoom</button><button id="map-zo">－ Zoom</button></div>
       <p class="dim">Upar = Uttar (North). Mouse wheel se zoom.<br>Up = North. Scroll to zoom.</p>
     </div></div>

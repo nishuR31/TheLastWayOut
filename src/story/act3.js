@@ -1,6 +1,6 @@
 // Chapters 5-8: deeper into the forest, the peepal + the light, the village, inside the house.
-import { G, ui, audio, THREE, N, T, U, say, wait, load, startScene, endScene, setTime, compHold, compFollow, reveal, fear, tired, use, gate, snapTo, go, goTrail, trailD, trailLen, lookFor, lookedAway, focus, around, stepsAt, spawn, caption, enableTrail, pushOff, pushOn } from './helpers.js'
-import { makeGlass } from '../world/people.js'
+import { G, ui, audio, THREE, N, T, U, say, wait, load, startScene, endScene, setTime, compHold, compFollow, reveal, fear, tired, use, gate, snapTo, go, goTrail, trailD, trailLen, lookFor, lookedAway, focus, around, stepsAt, spawn, caption, enableTrail, pushOff, pushOn, apparition, dread } from './helpers.js'
+import { makeSharbat } from '../world/props.js'
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z)
 const P = () => G.player
@@ -17,9 +17,10 @@ export async function ch7(s) {
   ui.titleCard('CHAPTER 7', 'Gaon', '3:20 AM', 3.4)
   G.clockRate = 6; fear(0.35); tired(0.85)
   await wait(1)
-  // ANY door can be knocked on. Only one house (picked at random) ever opens: the uncle comes out of that one.
+  // ANY door can be knocked on. Only one house ever opens — the lit one at the
+  // end of the lane, so the light is a true clue rather than a random detail.
   const cand = [...(L.doorHouses || []), H]
-  const pick = cand[Math.floor(Math.random() * cand.length)]
+  const pick = L.answerHouse || cand.find(h => h === H) || cand[0]
   const nk = new Map(); let answered = null, knocks = 0
   for (const hs of cand) {
     const kpos = hs === H ? L.refs.knock : hs.doorWorld
@@ -27,7 +28,7 @@ export async function ch7(s) {
       if (answered) return
       const n = (nk.get(hs) || 0) + 1; nk.set(hs, n); knocks++
       audio.knock(kpos, n > 1 ? 5 : 3, n > 1 ? 1.3 : 1); caption('[knock, knock]', 1.4); if (hs !== H) { L.flashEyes(hs); G.horrorTurn(V(hs.doorWorld.x, 1.7, hs.doorWorld.z), 0.5, 0.45, 0.1) }
-      if (hs === pick && n >= 2) { answered = hs; return }
+      if (hs === pick && n >= 3) { answered = hs; return }
       if (knocks === 1) T('Koi nahi khol raha...', 'Nobody is opening...', { dur: 2 })
       else if (knocks === 3) N('Andar roshni hai. Fir bhi koi aawaz nahi.', 'There is light inside. Still no sound.', { dur: 2.6 })
       else if (knocks === 5) T('Koi toh hoga. Doosra ghar try karte hain.', 'Somebody must be home. Try another house.', { dur: 2.8 })
@@ -38,6 +39,8 @@ export async function ch7(s) {
   await gate(() => trailD(L.lanePts) > 20, () => snapTo(0, 22), 0, [0, 22, 'Gali mein aage chalo · Walk down the lane'])
   caption('[no traffic, no TV, no dogs - only the dripping of rain from the roofs]', 3.6)
   await wait(2)
+  apparition('eyes', { dist: 12, life: 4 }); dread(0.18)
+  audio.eyeShimmer && audio.eyeShimmer(L.refs && L.refs.temple ? L.refs.temple : null)
   await N('Us khidki mein... kuch safed sa tha. Aankhon jaisa.', 'In that window... something white. Like eyes.', { dur: 3.2 })
   await T('Mat dekh. Pehle madad dhoondh.', 'Don\'t look. Find help first.', { dur: 2.4 })
   reveal('village', 'eyes')
@@ -95,17 +98,22 @@ export async function ch7(s) {
   dg.walkTo(L.refs.tray.x + 0.4, L.refs.tray.z + 0.6, 1.0)
   audio.pour(L.refs.tray, 1.4); caption('[liquid poured into glasses]', 2)
   await wait(2.4)
-  const g1 = makeGlass(true), g2 = makeGlass(true)
+  const g1 = makeSharbat(0.68), g2 = makeSharbat(0.68)
   g1.position.set(L.refs.tray.x - 0.08, L.refs.tray.y, L.refs.tray.z); g2.position.set(L.refs.tray.x + 0.1, L.refs.tray.y, L.refs.tray.z + 0.04)
   L.group.add(g1, g2)
   p.canMove = true
   dg.face(null)
   ui.toast('E — gilaas uthao', 4)
   await use(L.refs.tray, 'Sharbat lo', { r: 3.2, cone: -1 })
-  g1.visible = false; g2.visible = false
+  g2.visible = false
   p.canMove = false
-  await wait(0.5); audio.gulp(3); c.pose('drink'); await wait(2.4); c.pose('stand')
-  const e1 = makeGlass(false), e2 = makeGlass(false); e1.position.copy(g1.position); e2.position.copy(g2.position); L.group.add(e1, e2)
+  // The companion actually lifts the tumbler, sips, and the level drops.
+  await wait(0.5); audio.gulp(3)
+  c.hold(g1, 1, [0, -0.34, 0.11]); g1.visible = true
+  c.pose('sip'); await wait(2.4)
+  if (g1.userData.liquid) g1.userData.liquid.scale.y = 0.42
+  c.pose('stand'); c.hold(null); g2.visible = true
+  g1.position.set(L.refs.tray.x - 0.08, L.refs.tray.y, L.refs.tray.z); L.group.add(g1)
   await T('Accha laga. Garm sa.', 'That was good. Warming.', { dur: 2.2 })
   await N('Shukriya uncle.', 'Thank you, uncle.', { dur: 1.8 })
   if (s.fire && s.fire.made) {

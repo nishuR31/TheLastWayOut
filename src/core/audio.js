@@ -22,7 +22,10 @@ class AudioEngine {
     this.comp = c.createDynamicsCompressor(); this.comp.threshold.value = -16; this.comp.ratio.value = 4
     this.master.connect(this.comp); this.comp.connect(c.destination)
     this.busAmb = c.createGain(); this.busSfx = c.createGain(); this.busVoice = c.createGain()
-    this.busAmb.connect(this.master); this.busSfx.connect(this.master); this.busVoice.connect(this.master)
+    // Ambience passes through a tension low-pass: the world goes muffled as dread rises.
+    this.ambLP = c.createBiquadFilter(); this.ambLP.type = 'lowpass'; this.ambLP.frequency.value = 20000
+    this.busAmb.connect(this.ambLP); this.ambLP.connect(this.master)
+    this.busSfx.connect(this.master); this.busVoice.connect(this.master)
     this.hush = c.createGain(); this.hush.connect(this.busAmb) // ambience goes through hush for "sudden silence"
     // noise buffers
     const mk = (fn) => { const b = c.createBuffer(1, c.sampleRate * 3, c.sampleRate), d = b.getChannelData(0); fn(d); return b }
@@ -154,6 +157,7 @@ class AudioEngine {
       case 'grass': this._burst(this.nPink, 'bandpass', 2400 * pitch, 0.8, 0.12, 0.18 * v, o, t, 0.012); this._burst(this.nBrown, 'lowpass', 700, 1, 0.07, 0.4 * v, o, t); break
       case 'road': this._burst(this.nWhite, 'bandpass', 1900 * pitch, 1, 0.06, 0.2 * v, o, t, 0.002); this._burst(this.nBrown, 'lowpass', 600, 1, 0.07, 0.4 * v, o, t); break
       case 'wet': this._burst(this.nWhite, 'bandpass', 1200 * pitch, 0.7, 0.14, 0.3 * v, o, t, 0.006); this._burst(this.nBrown, 'lowpass', 500, 1, 0.12, 0.6 * v, o, t); break
+      case 'leaves': this.leaves(pos, v); break
       default: this._burst(this.nBrown, 'lowpass', 800 * pitch, 1, 0.09, 0.7 * v, o, t, 0.004); this._burst(this.nPink, 'bandpass', 2000, 1, 0.07, 0.1 * v, o, t)
     }
   }
@@ -291,5 +295,124 @@ class AudioEngine {
   clang(pos, v = 1) { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.2); this._tone(900, 880, 0.5, 'triangle', 0.15 * v, o, t); this._tone(1450, 1400, 0.4, 'sine', 0.1 * v, o, t) }
   fall(pos) { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx); this._burst(this.nBrown, 'lowpass', 500, 1, 0.3, 0.9, o, t, 0.01); this._burst(this.nWhite, 'bandpass', 1800, 1, 0.1, 0.2, o, t) }
   silence(on) { this.st.hush = on ? 1 : 0 }
+
+  // ---------- horror: tension + scares ----------
+  setTension(v = 0) {
+    if (!this.ctx || !this.ambLP) return
+    this.ambLP.frequency.setTargetAtTime(20000 - clamp(v, 0, 1) * 18800, this.ctx.currentTime, 0.25)
+  }
+  // A discordant stab used for jump scares. Loud, ugly, over in a fraction of a second.
+  sting(v = 1) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(null, this.busSfx)
+    this._tone(104, 44, 0.55, 'sawtooth', 0.5 * v, o, t)
+    this._tone(1880, 220, 0.32, 'square', 0.15 * v, o, t)
+    this._tone(2640, 2500, 0.12, 'sine', 0.2 * v, o, t)
+    this._burst(this.nWhite, 'highpass', 2800, 0.7, 0.2, 0.55 * v, o, t, 0.001)
+    this._burst(this.nBrown, 'lowpass', 320, 1, 0.6, 0.5 * v, o, t, 0.01)
+  }
+  // Ringing left in the ears after a scare.
+  tinnitus(f = 3200, dur = 1.4, v = 0.12) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(null, this.busSfx)
+    this._tone(f, f * 0.95, dur, 'sine', v, o, t)
+  }
+  // A long, low, wrong drone — dread without a scare.
+  drone(dur = 3, v = 0.14) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(null, this.busSfx)
+    this._tone(58, 46, dur, 'sine', v, o, t)
+    this._tone(87, 82, dur, 'triangle', v * 0.5, o, t)
+  }
+  // Breath very close to the listener's ear.
+  closeBreath(v = 1) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(null, this.busSfx)
+    this._burst(this.nPink, 'bandpass', 1200, 0.7, 0.5, 0.22 * v, o, t, 0.18)
+  }
+
+  // ---------- full horror palette ----------
+  leaves(pos, v = 1) { // dry leaf crunch (the forest's signature sound)
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx)
+    for (let i = 0; i < 3; i++) this._burst(this.nWhite, 'bandpass', 2600 + Math.random() * 1800, 1.1, 0.09, 0.13 * v, o, t + i * 0.07, 0.004)
+    this._burst(this.nBrown, 'lowpass', 900, 1, 0.12, 0.18 * v, o, t, 0.008)
+  }
+  howl(pos) { // long distant animal-like howl, no animal ever shown
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.5)
+    const s = this.ctx.createOscillator(), g = this._g(0), f = this._f('bandpass', 700, 2.4)
+    s.type = 'sawtooth'
+    s.frequency.setValueAtTime(260, t); s.frequency.linearRampToValueAtTime(540, t + 0.5)
+    s.frequency.linearRampToValueAtTime(360, t + 1.8); s.frequency.linearRampToValueAtTime(180, t + 2.5)
+    this._env(g, t, 0.35, 2.3, 0.11)
+    this._chain(s, f, g, o); s.start(t); s.stop(t + 2.7)
+    this.caption('[a howl, far away — no animal in sight]', 3)
+  }
+  eyeShimmer(pos) { // pale eyes at a window
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.3)
+    this._tone(2400, 2650, 0.5, 'sine', 0.05, o, t)
+    this._tone(3300, 3100, 0.35, 'sine', 0.035, o, t + 0.06)
+  }
+  shadowWhoosh(pos) { // a shadow crossing with no source
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx)
+    const b = this._burst(this.nPink, 'lowpass', 500, 0.8, 0.7, 0.16, o, t, 0.3)
+    b.frequency.setValueAtTime(300, t); b.frequency.linearRampToValueAtTime(900, t + 0.35)
+  }
+  figureMoan(pos) { // the tall, faceless figure
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.3)
+    this._tone(96, 58, 2.4, 'sawtooth', 0.13, o, t)
+    this._tone(144, 88, 2.0, 'sine', 0.07, o, t + 0.1)
+    this.closeBreath(0.8)
+  }
+  cloth(pos) { // a companion quietly no longer there
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx)
+    this._burst(this.nPink, 'bandpass', 800, 0.7, 0.28, 0.12, o, t, 0.06)
+    this._burst(this.nWhite, 'bandpass', 1900, 0.9, 0.09, 0.06, o, t + 0.05, 0.003)
+  }
+  fireOut(pos) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx)
+    this._burst(this.nPink, 'lowpass', 1400, 0.8, 0.5, 0.3, o, t, 0.02)
+    this._tone(220, 60, 0.4, 'sine', 0.1, o, t)
+  }
+  blueFlare(pos) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx)
+    this._tone(300, 1400, 0.25, 'triangle', 0.09, o, t)
+    this._burst(this.nWhite, 'highpass', 3200, 0.8, 0.3, 0.1, o, t, 0.01)
+  }
+  metalClack(pos) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx)
+    this._tone(1500, 700, 0.06, 'square', 0.12, o, t)
+    this._burst(this.nWhite, 'bandpass', 2600, 2, 0.05, 0.16, o, t, 0.001)
+  }
+  ignition(on = true) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(null, this.busSfx)
+    if (on) {
+      this._tone(70, 150, 0.5, 'sawtooth', 0.12, o, t)      // starter
+      this._tone(160, 90, 0.35, 'square', 0.09, o, t + 0.45) // catch
+      this._burst(this.nBrown, 'lowpass', 400, 1, 0.6, 0.16, o, t + 0.45, 0.05)
+    } else {
+      this._tone(150, 55, 0.5, 'sawtooth', 0.1, o, t)
+      this._burst(this.nBrown, 'lowpass', 320, 1, 0.35, 0.12, o, t + 0.3, 0.05)
+    }
+  }
+  echoCall(pos, who = 'mother') { // a familiar voice from the direction just left
+    if (!this.ctx) return
+    this.call(pos, who, 1)
+    setTimeout(() => { if (this.ctx) { const o = this._out(pos, this.busSfx, 0.4); this._tone(420, 300, 0.35, 'sine', 0.035, o, this.ctx.currentTime) } }, 320)
+  }
+  diyaChime(pos) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.4)
+    ;[880, 1320, 1760].forEach((f, i) => this._tone(f, f * 0.98, 1.2 - i * 0.2, 'sine', 0.045 - i * 0.01, o, t + i * 0.04))
+  }
 }
 export const audio = new AudioEngine()

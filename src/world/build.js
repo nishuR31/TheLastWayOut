@@ -25,16 +25,29 @@ export class Level {
   update(dt) { this.t += dt; for (const u of this.updaters) u(dt, this.t); for (const f of this.flick) { const k = f.base * (0.78 + 0.22 * Math.sin(this.t * f.sp + f.ph) + 0.1 * Math.sin(this.t * f.sp * 2.3 + f.ph * 2)); f.light.intensity = k * (f.mul ? f.mul() : 1); if (f.glow) f.glow.material.opacity = 0.5 * (k / f.base) * (f.mul ? f.mul() : 1) } }
   solid(x0, z0, x1, z1, h = 3) {
     this.walk.box(x0, z0, x1, z1)
-    const b = new CANNON.Body({ mass: 0, material: this.G.mat.ground }); b.addShape(new CANNON.Box(new CANNON.Vec3(Math.abs(x1 - x0) / 2, h / 2, Math.abs(z1 - z0) / 2))); b.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2)
+    const g = this.G.groups || { GROUND: 1, STATIC: 2, VEHICLE: 4, PROP: 8 }
+    const b = new CANNON.Body({ mass: 0, material: this.G.mat.ground, collisionFilterGroup: g.STATIC, collisionFilterMask: g.VEHICLE | g.PROP | g.GROUND })
+    b.addShape(new CANNON.Box(new CANNON.Vec3(Math.abs(x1 - x0) / 2, h / 2, Math.abs(z1 - z0) / 2))); b.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2)
     this.G.world.addBody(b); this.bodies.push(b); return b
   }
   dynamic(mesh, shape, mass, x, y, z, mat) {
-    const b = new CANNON.Body({ mass, material: mat || this.G.mat.prop, linearDamping: 0.15, angularDamping: 0.35 }); b.addShape(shape); b.position.set(x, y, z); this.G.world.addBody(b); this.bodies.push(b)
+    const g = this.G.groups || { GROUND: 1, STATIC: 2, VEHICLE: 4, PROP: 8 }
+    const b = new CANNON.Body({ mass, material: mat || this.G.mat.prop, linearDamping: 0.15, angularDamping: 0.35, collisionFilterGroup: g.PROP, collisionFilterMask: g.VEHICLE | g.STATIC | g.GROUND })
+    b.addShape(shape); b.position.set(x, y, z); this.G.world.addBody(b); this.bodies.push(b)
     mesh.position.set(x, y, z); this.group.add(mesh); this.updaters.push(() => { mesh.position.copy(b.position); mesh.quaternion.copy(b.quaternion) }); return b
   }
   ground(w, d, texKey, rep = 1, cx = 0, cz = 0, color = 0xffffff) {
     const t = tex[texKey]().clone(); t.needsUpdate = true; t.repeat.set(w / rep, d / rep)
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), S({ map: t, color })); m.rotation.x = -Math.PI / 2; m.position.set(cx, 0, cz); m.receiveShadow = true; this.group.add(m); return m
+    const seg = this.heightAt ? Math.min(80, Math.max(12, Math.floor(Math.max(w, d) / 6))) : 1
+    const geo = new THREE.PlaneGeometry(w, d, seg, seg)
+    if (this.heightAt) {
+      // the plane is rotated -90° about X: local (x,y) -> world (cx+x, cz-y),
+      // and local z becomes world height.
+      const p = geo.attributes.position
+      for (let i = 0; i < p.count; i++) p.setZ(i, this.heightAt(cx + p.getX(i), cz - p.getY(i)))
+      p.needsUpdate = true; geo.computeVertexNormals()
+    }
+    const m = new THREE.Mesh(geo, S({ map: t, color })); m.rotation.x = -Math.PI / 2; m.position.set(cx, 0, cz); m.receiveShadow = true; this.group.add(m); return m
   }
   ribbon(pts, w, texKey = 'mud', rep = 4, y = 0.012, color = 0xffffff, wobble = true) {
     const P = pts.map(p => (Array.isArray(p) ? { x: p[0], z: p[1] } : p)), pos = [], uv = [], idx = []; let acc = 0
@@ -42,14 +55,16 @@ export class Level {
       const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)]; let dx = b.x - a.x, dz = b.z - a.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l
       if (i > 0) acc += Math.hypot(P[i].x - P[i - 1].x, P[i].z - P[i - 1].z)
       const nx = -dz, nz = dx, wob = wobble ? 0.75 + 0.25 * Math.sin(i * 1.7) : 1, ww = typeof w === 'function' ? w(i, acc) : w
-      pos.push(P[i].x + nx * ww * wob, y, P[i].z + nz * ww * wob, P[i].x - nx * ww * wob, y, P[i].z - nz * ww * wob); uv.push(0, acc / rep, 1, acc / rep)
+      const hA = this.heightAt ? this.heightAt(P[i].x + nx * ww * wob, P[i].z + nz * ww * wob) : 0
+      const hB = this.heightAt ? this.heightAt(P[i].x - nx * ww * wob, P[i].z - nz * ww * wob) : 0
+      pos.push(P[i].x + nx * ww * wob, hA + y, P[i].z + nz * ww * wob, P[i].x - nx * ww * wob, hB + y, P[i].z - nz * ww * wob); uv.push(0, acc / rep, 1, acc / rep)
       if (i < P.length - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2) }
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals()
     const t = tex[texKey]().clone(); t.needsUpdate = true; const m = new THREE.Mesh(g, S({ map: t, color, side: THREE.DoubleSide })); m.receiveShadow = true; this.group.add(m); return m
   }
   puddle(x, z, r) {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 18), new THREE.MeshStandardMaterial({ color: '#1b2430', roughness: 0.04, metalness: 0.85, transparent: true, opacity: 0.8 })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.02, z); m.scale.y = 0.7; m.rotation.z = R.range(0, 3); this.group.add(m); this.puddles.push({ x, z, r }); return m
+    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 18), new THREE.MeshStandardMaterial({ color: '#1b2430', roughness: 0.04, metalness: 0.85, transparent: true, opacity: 0.8 })); m.rotation.x = -Math.PI / 2; m.position.set(x, (this.groundY ? this.groundY(x, z) : 0) + 0.02, z); m.scale.y = 0.7; m.rotation.z = R.range(0, 3); this.group.add(m); this.puddles.push({ x, z, r }); return m
   }
   lantern(x, y, z, o = {}) {
     const g = new THREE.Group(); g.position.set(x, y, z)
@@ -220,11 +235,11 @@ export function signboard(text, bg = '#1f5a34', fg = '#f2f0e0', w = 2.2, h = 1.0
 export function bush(s = 1) { const g = new THREE.Group(), m = S({ map: tex.leaf() }); for (let i = 0; i < 4; i++) sph(g, 0.4 * s, m, R.range(-0.4, 0.4) * s, 0.35 * s, R.range(-0.4, 0.4) * s, 1, 0.8, 1); return g }
 export function can() { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 12), new THREE.MeshStandardMaterial({ color: '#c0161c', metalness: 0.8, roughness: 0.3 })); g.add(m); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.033, 0.01, 12), new THREE.MeshStandardMaterial({ color: '#ccc', metalness: 0.9, roughness: 0.3 })); t.position.y = 0.06; g.add(t); return g }
 export function ball() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshStandardMaterial({ map: tex.cloth('#e8e8e0', '#2a60b0', 'print'), roughness: 0.6 })); m.castShadow = true; return m }
-export function helmetRack() { const g = new THREE.Group(); bx(g, 0.6, 0.05, 0.2, wood(), 0, 1.4, 0); g.userData.helmets = []; for (const x of [-0.18, 0.18]) { const h = sph(g, 0.14, S({ color: x < 0 ? '#c02020' : '#202020', roughness: 0.3, metalness: 0.2 }), x, 1.55, 0.02, 1, 0.9, 1.1); g.userData.helmets.push(h) } return g }
+export function helmetRack() { const g = new THREE.Group(); bx(g, 0.6, 0.05, 0.2, wood(), 0, 1.4, 0); g.userData.helmets = []; g.userData.helmetRack = true; for (const x of [-0.18, 0.18]) { const h = sph(g, 0.14, S({ color: x < 0 ? '#c02020' : '#202020', roughness: 0.3, metalness: 0.2 }), x, 1.55, 0.02, 1, 0.9, 1.1); g.userData.helmets.push(h) } return g }
 export function ropeBridgeless() { return new THREE.Group() }
 
 // ---------- vehicles (forward = +z) ----------
-export function motorbike(color = '#a31d1d') {
+export function motorbike(color = '#a31d1d', riding = false) {
   const g = new THREE.Group(), body = S({ color, roughness: 0.35, metalness: 0.4 }), dark = S({ color: '#141414', roughness: 0.8 }), chrome = S({ color: '#b8bcc0', metalness: 0.9, roughness: 0.25 })
   const lean = new THREE.Group(); g.add(lean)
   for (const z of [-0.62, 0.62]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.07, 8, 18), dark); w.rotation.y = Math.PI / 2; w.position.set(0, 0.36, z); lean.add(w); const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 10), chrome); hub.rotation.z = Math.PI / 2; hub.position.set(0, 0.36, z); lean.add(hub) }
@@ -236,7 +251,8 @@ export function motorbike(color = '#a31d1d') {
   bx(lean, 0.6, 0.03, 0.03, chrome, 0, 1.02, 0.5)                    // handlebar
   const hl = sph(lean, 0.075, new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#ffe9b0', emissiveIntensity: 0.4 }), 0, 0.95, 0.66)
   const pipe = bx(lean, 0.07, 0.07, 0.8, chrome, 0.16, 0.3, -0.25)
-  g.userData.lean = lean; lean.rotation.z = 0.16; lean.position.x = 0.1   // resting on its side stand
+  g.userData.lean = lean; g.userData.headMesh = hl
+  if (!riding) { lean.rotation.z = 0.16; lean.position.x = 0.1 }  // resting on its side stand
   return g
 }
 export function carModel(color = '#c8c8c8') {

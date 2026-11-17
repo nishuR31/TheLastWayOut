@@ -1,6 +1,6 @@
 // Home + street. opts.night: Ending A homecoming (family is up, tiffin on the table)
 import * as THREE from 'three'
-import { Level, buildHouse, sofa, table, chair, stool, charpai, tvSet, shelf, matka, brassVessel, chulha, garlandedPhoto, fan, tubeLight, pole, wires, streetLight, autoRickshaw, cow, dogModel, helmetRack, keyHook, motorbike, bush, bx, cyl, sph } from '../world/build.js'
+import { Level, buildHouse, sofa, table, chair, stool, charpai, tvSet, shelf, matka, brassVessel, chulha, garlandedPhoto, fan, tubeLight, pole, wires, streetLight, autoRickshaw, cow, dogModel, helmetRack, keyHook, motorbike, bush, bed, bx, cyl, sph } from '../world/build.js'
 import { makeTiffin, makeSteelGlass } from '../world/people.js'
 import { tex, withPBR } from '../world/textures.js'
 import { R } from '../core/util.js'
@@ -27,8 +27,13 @@ export function populateHome(G, L, night, o = {}) {
   house.place(table(1.2, 0.7, 0.45), 2.4, -0.8, 0, 0)
   house.place(shelf(), 4.1, 0.2, 0, -Math.PI / 2)
   house.place(garlandedPhoto(), -4.2, -1.0, 1.55, Math.PI / 2)
+  // the bed you wake up in (final script: phone face-up on the bed, helmets by the door)
+  const bedObj = bed(); house.place(bedObj, -3.5, -2.0, 0, 0); L.refs.bedPos = house.local(-2.9, 0.7, -2.0)
+  const phoneOnBed = new THREE.Group()
+  phoneOnBed.add(new THREE.Mesh(new THREE.BoxGeometry(0.076, 0.01, 0.158), new THREE.MeshStandardMaterial({ color: '#15181c', metalness: 0.4, roughness: 0.4 })))
+  house.place(phoneOnBed, -3.2, 0.72, -2.0)
   // kitchen corner
-  house.place(chulha(), -3.7, -2.5, 0, 0)
+  house.place(chulha(), -4.0, 0.1, 0, 0)
   house.place(table(1.3, 0.7, 0.8), -2.9, 0.4, 0, 0)
   const tiffin = makeTiffin(); house.place(tiffin, -2.9, 0.4, 0.8, 0.3)     // left on the table. Never mentioned.
   const gl1 = makeSteelGlass(); house.place(gl1, -2.5, 0.5, 0.8)
@@ -36,9 +41,24 @@ export function populateHome(G, L, night, o = {}) {
   const mt = matka(); house.place(mt, -4.0, 2.4, 0, 0)
   const rack = helmetRack(); house.place(rack, 3.9, 2.6, 0, 0)
   const hook = keyHook(); house.place(hook, 4.38, 1.1, 1.45, -Math.PI / 2); L.refs.keyHook = house.local(4.3, 1.45, 1.1)
-  L.refs.helmetPos = house.local(3.9, 1.3, 2.4); L.refs.rack = rack; L.refs.homeTable = house.local(-2.9, 0.8, 0.4)
+  L.refs.helmetPos = house.local(3.9, 1.3, 2.4); L.refs.rack = rack
+  // phone now starts on the low coffee table by the sofa, not the kitchen table
+  L.refs.homeTable = house.local(2.4, 0.75, -0.8)
   L.refs.tiffinPos = house.local(-2.9, 0.9, 0.4)
   L.refs.tiffin = tiffin
+  // interior partitions: a kitchen wall and a small back bedroom, with wide gaps to walk through
+  {
+    const pw = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#dccba6') }))
+    const div = (lx0, lz0, lx1, lz1, hh = 1.3) => {
+      const ww = Math.max(0.14, Math.abs(lx1 - lx0)), dd = Math.max(0.14, Math.abs(lz1 - lz0))
+      bx(house.group, ww, hh, dd, pw, (lx0 + lx1) / 2, hh / 2, (lz0 + lz1) / 2)
+    }
+    div(-4.35, -1.15, -1.7, -1.15)   // kitchen / living divider
+    div(0.95, -1.15, 4.35, -1.15)    // bedroom front
+    div(1.15, -2.9, 1.15, -1.85)     // bedroom side
+    // a second small room divider on the left
+    div(-2.2, -2.9, -2.2, -2.0, 1.1)
+  }
   // yard
   const ch = charpai(); ch.position.set(-4.5, 0, 7.6); ch.rotation.y = 0.2; L.add(ch)
   const tul = bush(0.6); tul.position.set(4.6, 0, 5.2); L.add(tul)
@@ -48,6 +68,16 @@ export function populateHome(G, L, night, o = {}) {
   const wall = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#cdbd96') }))
   bx(L.group, 6.6, 1.2, 0.2, wall, -3.7, 0, 11.6); bx(L.group, 6.6, 1.2, 0.2, wall, 6.1, 0, 11.6); L.solid(-7, 11.5, -0.4, 11.75, 1.2); L.solid(2.8, 11.5, 9.4, 11.75, 1.2)
   bx(L.group, 0.3, 1.5, 0.3, wall, -0.4, 0, 11.6); bx(L.group, 0.3, 1.5, 0.3, wall, 2.8, 0, 11.6)
+  // compound boundary: low walls round the yard, with a clear gap at the front door
+  {
+    const bwl = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#cbb994') }))
+    bx(L.group, 0.22, 1.05, 8.3, bwl, -7.2, 0, 7.4)
+    bx(L.group, 0.22, 1.05, 8.3, bwl, 7.2, 0, 7.4)
+    bx(L.group, 6.9, 1.05, 0.22, bwl, -3.75, 0, 3.35)
+    bx(L.group, 5.4, 1.05, 0.22, bwl, 4.5, 0, 3.35)
+    L.solid(-7.3, 3.3, -7.1, 11.5, 1.05); L.solid(7.1, 3.3, 7.3, 11.5, 1.05)
+    L.solid(-7.3, 3.3, -0.4, 3.5, 1.05); L.solid(1.8, 3.3, 7.3, 3.5, 1.05)
+  }
   // the front gate (on the road side): two iron leaves that swing open towards the street when anyone gets near
   { const iron = new THREE.MeshStandardMaterial({ color: '#2f3a34', roughness: 0.6, metalness: 0.6 })
     const leaf = (hx, dir) => { const piv = new THREE.Group(); piv.position.set(hx, 0, 11.6); const lf = new THREE.Group(); lf.position.x = dir * 0.8; lf.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.05), iron)); lf.children[0].position.y = 1.15; const b2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.05), iron); b2.position.y = 0.25; lf.add(b2); for (let i = 0; i < 8; i++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.04), iron); bar.position.set(-0.65 + i * 0.185, 0.7, 0); lf.add(bar) } piv.add(lf); L.add(piv); return piv }
@@ -112,7 +142,7 @@ export function populateHome(G, L, night, o = {}) {
     for (const x of [-32, 22, 66, 96, 126]) tr(x + 4, R.range(-12, -6), 1.1), tr(x, R.range(24, 34), 1.2)
   }
   // scooter parked on the street, facing +x (east: the way out of town)
-  L.spawn = night ? { x: 2, z: 5, yaw: Math.PI } : { x: -2.2, z: -0.5, yaw: -2.36 }
+  L.spawn = night ? { x: 2, z: 5, yaw: Math.PI } : { x: -2.35, z: -1.9, yaw: Math.PI / 2 } // wake up beside the bed
   if (!night) {
     G.addScooter(L, -1.6, 5.0, 0)   // parked on the veranda, facing the gate
   }

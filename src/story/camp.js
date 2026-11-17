@@ -1,6 +1,7 @@
 // Chapter 3-4 of the final script: the campsite (warm, funny, ordinary) and then THE LOOP (the bike is in plain sight and unreachable).
-import { G, ui, audio, THREE, N, T, say, wait, load, startScene, setTime, reveal, fear, tired, gate, snapTo, go, caption, spawn, choose, compHold, compFollow } from './helpers.js'
+import { G, ui, audio, THREE, N, T, say, wait, load, startScene, setTime, reveal, fear, tired, gate, snapTo, go, use, caption, spawn, choose, compHold, compFollow, apparition, dread } from './helpers.js'
 import { fire } from '../core/fire.js'
+import { makeBiscuit, makeChai, makeMatchbox } from '../world/props.js'
 
 const P = () => G.player
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z)
@@ -71,7 +72,7 @@ export async function ch2(s) {
   act('aman', aman.pos, 'Aman ka drone: group photo', async () => {
     await M('Ek group photo kheenchte hain, sab line mein! Dekho, upar se kaisa lag raha hai!', 'Group photo, everyone in line! Look how it looks from above!', { dur: 4 })
     caption('[the drone screen: a green canopy, the stream like a thread of silver glass]', 4.4)
-    await wait(2); audio.click(); G.photos++; ui.toast('Group photo li gayi 📷 · Group photo taken', 3)
+    await wait(2); audio.click(); G.photos++; ui.toast('Group photo li gayi [ic:camera] · Group photo taken', 3)
   })
   act('rohan', rohan.pos, 'Rohan se baat karo', async () => {
     await wait(0.4)
@@ -87,7 +88,7 @@ export async function ch2(s) {
   }, 3.6)
   act('drawing', L.refs.drawing, 'Patthar par nishan dekho · photo lo', async () => {
     await N('Ye kisne banaya? Ek gaon... ek kuan... bargad ka ped.', 'Who drew this? A village... a well... a banyan tree.', { dur: 4 })
-    audio.click(); G.photos++; G.drawingPhoto = true; ui.toast('Photo li gayi 📷', 2.4)
+    audio.click(); G.photos++; G.drawingPhoto = true; ui.toast('Photo li gayi [ic:camera]', 2.4)
   })
   act('antakshari', new THREE.Vector3(0, 1, 62.4), 'Antakshari khelo', async () => {
     await K('Chalo antakshari! Karan aur Nishant ek team. Aman aur Nishan doosri. Arunab bhaiya judge.', 'Antakshari! Karan and Nishant one team, Aman and Nishan the other. Arunab is the judge.', { dur: 5 })
@@ -100,11 +101,13 @@ export async function ch2(s) {
     setTime(Math.min(16.9, G.time + 0.6), 0, false, true); G.clockRate = 30
   })
   act('biscuit', L.refs.bench, 'Bench par aakhri biscuit: Rock-Paper-Scissors', async () => {
+    const bic = makeBiscuit(); bic.position.set(L.refs.bench.x + 0.08, L.refs.bench.y + 0.01, L.refs.bench.z); L.group.add(bic)
     await T('Ek hi biscuit bacha hai. Rock-paper-scissors!', 'One biscuit left. Rock-paper-scissors!', { dur: 3 })
     const k = await choose('Tum kya dikhaoge?', ['Rock', 'Paper', 'Scissors'], 1)
     if (k === 1) { await T('Paper rock ko dhak leta hai. Tu jeeta.', 'Paper covers rock. You win.', { dur: 2.4 }); await N('Main jeeta!', 'I win!', { dur: 1.4 }) }
     else await T('Teen, do, ek, ab! Tu haar gaya!', 'Three, two, one, now! You lose!', { dur: 2.6 })
     await T('Bhai, tu toh rules hi badal deta hai.', 'You change the rules!', { dur: 2.2 })
+    bic.visible = false; c.pose('eat'); await wait(1.8); c.pose('stand')
   })
   G.addInteract({ pos: L.refs.bench, label: 'Bench par aaram karo (waqt guzarta hai)', r: 2.4, cone: -1, key: 'E', once: false, enabled: () => !busy && G.time < 17, onUse: () => {
     busy = true; p.canMove = false
@@ -116,18 +119,23 @@ export async function ch2(s) {
   p.canMove = false; G.env.set('evening'); G.clockRate = 6
   const pit = fire.fires[0]
   await A('Aag jalana ho toh. Teen teeli hain.', 'If you want a fire. Three matches.', { dur: 3 })
-  G.matches = 3; audio.click(); ui.toast('Arunab ne matchbox diya 🔥 · Matchbox (3 teeli)', 3.6)
-  await wait(0.6); G.matches = 2; fire.lightNow(pit, 400)
+  const mb = makeMatchbox(); mb.position.set(arunab.pos.x + 0.35, 0.55, arunab.pos.z + 0.25); L.group.add(mb)
+  G.matches = 3; audio.click(); ui.toast('Arunab ne matchbox diya [ic:matchbox] · Matchbox (3 teeli)', 3.6)
+  await wait(0.6); G.matches = 2; mb.visible = false; fire.lightNow(pit, 400)
   caption('[one match. The fire catches on the first try]', 3)
   for (const [a, x, z] of [[arunab, -2.2, 58.6], [karan, 2.4, 63.4], [aman, 3.6, 60.6], [rohan, -0.6, 63.8]]) { a.walkTo(x, z, 1.6) }
   await wait(3); karan.pose('sit'); rohan.pose('sit'); arunab.pose('sit')
+  // cups of chai within reach of the fire — the warmth the night will take away
+  for (const [x, z] of [[-2.4, 59.1], [2.5, 63.2], [-0.5, 63.3], [3.4, 60.9]]) {
+    const cup = makeChai(); cup.position.set(x, 0.44, z); L.group.add(cup)
+  }
   await K('(guitar bajata hai) Sab saath mein! Wahi purana gaana!', '(plays) Everyone together! The old song!', { dur: 3 })
   caption('[six people singing in six different keys. Nishant is the loudest]', 4.6)
   await wait(4)
   await T('Bhai, ye toh perfect hai. Aise hi ruk jaate hain yahin.', 'This is perfect. Let\'s just stay here.', { dur: 3 })
   await N('Mummy ko kya bolenge?', 'What will we tell Mummy?', { dur: 2 })
   await T('Ki Bear Grylls ne roka tha.', 'That Bear Grylls stopped us.', { dur: 2.4 })
-  audio.click(); G.photos++; ui.toast('Aakhri photo, sab aag ke saamne 📷', 3)
+  audio.click(); G.photos++; ui.toast('Aakhri photo, sab aag ke saamne [ic:camera]', 3)
   await wait(2)
   // the crew leaves, one by one, Arunab last
   await K('Chalo bhai log, hum nikalte hain. Raasta lamba hai.', 'Right, we are off. It is a long way.', { dur: 3 })
@@ -143,14 +151,19 @@ export async function ch2(s) {
   await wait(5)
   for (const a of [arunab, karan, aman, rohan]) G.removeActor(a)
   caption('[the engines fade down the track. The clearing is empty for the first time all day. Somewhere behind the bench, unseen, one dry leaf drops]', 6)
+  // a slow curved drift back toward the empty bench — the warmth is gone
+  try {
+    await G.shot({ from: V3(-6.4, 1.65, 66.8), to: V3(-3.1, 1.38, 64.6), lookFrom: V3(0, 0.95, 60), lookTo: V3(-4.5, 0.85, 63.5), dur: 3.0, fov: 52, fov1: 62, arc: { x: 0.55, y: 0.3, z: -0.35 }, handheld: 0.22, ease: 'out' })
+  } finally { G.endShot() }
   G.horrorTurn(L.refs.bench, 1.6, 0.9, 0.12)
+  apparition('shadow', { dist: 16, life: 5 }); dread(0.2)
   await wait(4)
   setTime(17.67, 0, false, true); G.clockRate = 0
   p.canMove = true
   await T('Bhai, 5:40 ho gaye. Nikalna chahiye.', 'It is 5:40. We should go.', { dur: 2.6 })
   await N('Haan. Aag bujha de. Chal.', 'Yes. Put the fire out. Come on.', { dur: 2.2 })
   ui.objective('Aag ko paani se bujhao (E) · Put the fire out')
-  await G.interact(new THREE.Vector3(FP.x, 0.6, FP.z), 'Aag ko stream ke paani se bujhao', { r: 3.4, cone: -1 })
+  await use(new THREE.Vector3(FP.x, 0.6, FP.z), 'Aag ko stream ke paani se bujhao', { r: 3.4, cone: -1 })
   fire._out(pit); audio.puff && audio.puff(1); caption('[the hiss, the steam, the smell of wet ash]', 3.4)
   G.matches = 2; ui.objective(null)
   await wait(2.4)

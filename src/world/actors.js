@@ -1,6 +1,7 @@
 // Actor = a Person rig with simple path-following, look-at, footsteps and attach support
 import * as THREE from 'three'
-import { makePerson } from './people.js'
+import { humanFromOutfit } from './humanRig.js'
+import { lod } from './lod.js'
 import { angDiff, damp, clamp } from '../core/util.js'
 import { audio } from '../core/audio.js'
 
@@ -8,7 +9,8 @@ const _q = new THREE.Quaternion(), _e = new THREE.Euler()
 
 export class Actor {
   constructor(G, outfit, over = {}) {
-    this.G = G; this.key = outfit; this.P = makePerson(outfit, over); this.root = this.P.root
+    this.G = G; this.key = outfit; this.P = humanFromOutfit(outfit, over); this.root = this.P.root
+    lod.register(this.P)
     this.pos = this.root.position; this.yaw = 0; this.path = []; this.speed = 0; this.walkSpeed = 1.5
     this.mode = 'idle'; this.lookTarget = null; this.stepT = 0; this.sfx = true; this.attach = null; this.faceYaw = null
     this.wander = 0; this.hidden = false; this.stepVol = 1; this.collide = false; this.torch = null
@@ -40,11 +42,12 @@ export class Actor {
       }
     } else if (this.faceYaw !== null) this.yaw += angDiff(this.yaw, this.faceYaw) * Math.min(1, dt * 5)
     this.speed = damp(this.speed, moving, 8, dt)
+    if (G.level && G.level.groundY && !(G.level.isIndoors && G.level.isIndoors(this.pos.x, this.pos.z))) this.pos.y = G.level.groundY(this.pos.x, this.pos.z)
     this.root.rotation.y = this.yaw
     // head look
     if (this.lookTarget) { const t = this.lookTarget.isVector3 ? this.lookTarget : (this.lookTarget.pos || this.lookTarget); const dx = t.x - this.pos.x, dz = t.z - this.pos.z; const rel = angDiff(this.yaw, Math.atan2(dx, dz)); this.P.lookY = clamp(rel, -1.1, 1.1); this.P.lookX = -Math.atan2((t.y ?? 1.2) - 1.55, Math.hypot(dx, dz)) * 0.5 } else { this.P.lookY *= 0.94; this.P.lookX *= 0.94 }
     this.P.update(dt, this.speed)
     if (this.sfx && this.speed > 0.4 && !this.hidden && audio.ctx) { this.stepT -= dt * this.speed; if (this.stepT <= 0) { this.stepT = 0.78; const s = G.level && G.level.surface ? G.level.surface(this.pos.x, this.pos.z) : 'dirt'; audio.footstep(s, 0.8 * this.stepVol, { x: this.pos.x, y: 0.1, z: this.pos.z }) } }
   }
-  dispose() { this.G.scene.remove(this.root); this.root.traverse(o => { if (o.geometry) o.geometry.dispose() }) }
+  dispose() { lod.unregister(this.P); this.G.scene.remove(this.root); this.root.traverse(o => { if (o.geometry) o.geometry.dispose() }) }
 }

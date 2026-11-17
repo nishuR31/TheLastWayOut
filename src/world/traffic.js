@@ -4,23 +4,64 @@ import * as THREE from 'three'
 import { carModel, motorbike, truck } from './build.js'
 import { ptAt, projDist } from './common.js'
 import { R } from '../core/util.js'
+import { vehicle, human } from './variety.js'
+import { lod } from './lod.js'
 import { startCrash } from '../core/roam.js'
 
 const COLORS = ['#c8c8c8', '#8a1c1c', '#1d3f7a', '#e0d8c0', '#2d5a3a', '#3a3a3e', '#b8892a']
-const SPEC = { car: { len: 4.2, v: [10, 15] }, truck: { len: 7.5, v: [7, 10] }, bike: { len: 2.0, v: [9, 13] } }
+const SPEC = {
+  car: { len: 4.2, v: [10, 15] }, truck: { len: 7.5, v: [7, 10] }, bike: { len: 2.0, v: [9, 13] },
+  auto: { len: 2.6, v: [7, 11] }, van: { len: 4.4, v: [9, 13] }, tractor: { len: 3.4, v: [4, 7] },
+  cycle: { len: 1.8, v: [3, 5] }, cart: { len: 3.2, v: [2, 4] }
+}
+// Silhouette variants per kind — the mesh factory decides the actual shape.
+const VARIANTS = {
+  bike: ['standard', 'sports', 'cruiser', 'dirt'], car: ['hatch', 'sedan', 'suv'],
+  truck: ['cargo', 'tanker'], auto: ['green', 'yellow', 'black'],
+  van: ['tempo', 'delivery'], tractor: ['red', 'blue', 'green'],
+  cycle: ['road', 'gear'], cart: ['wood', 'painted']
+}
+const AUTO_COLORS = { green: '#2d7a3a', yellow: '#d8b02a', black: '#3a3a3e' }
+const RAD = { truck: 2.6, bike: 1.3, auto: 1.8, van: 2.2, tractor: 2.2, cycle: 1.0, cart: 2.0 }
+const hornOf = (k) => (k === 'truck' || k === 'tractor' ? 'truck' : 'car')
 
 export function makeTraffic(L, G, pts, o = {}) {
   const count = o.count ?? 7, lanesAt = o.lanesAt || (() => [o.lane ?? 2.1]), len = pts.reduce((a, p, i) => (i ? a + Math.hypot(p.x - pts[i - 1].x, p.z - pts[i - 1].z) : 0), 0)
   const vs = []
-  const mkMesh = (kind) => {
-    if (kind === 'truck') { const t = truck(); const ls = []; t.traverse(q => { if (q.isLight) ls.push(q) }); ls.forEach(l => l.parent.remove(l)); return t }
-    if (kind === 'bike') { const b = motorbike(COLORS[R.int(0, 5)]); b.userData.lean.rotation.z = 0; b.userData.lean.position.x = 0; return b }
-    return carModel(COLORS[Math.floor(R.next() * COLORS.length)])
+  const mkMesh = (kind, seed) => {
+    const variants = VARIANTS[kind] || ['standard']
+    const n = Math.abs(Math.floor(Math.sin(seed) * 10000)) % variants.length
+    const variant = variants[n]
+    const color = kind === 'auto' ? (AUTO_COLORS[variant] || '#2d7a3a')
+      : COLORS[Math.abs(Math.floor(Math.sin(seed * 3) * 10000)) % COLORS.length]
+    return vehicle({ kind, variant, color })
   }
-  const kinds = ['car', 'car', 'bike', 'truck', 'car', 'bike', 'car', 'truck', 'car', 'bike', 'car', 'car']
+  // every vehicle gets a rider with an age / build / role variety
+  const addRider = (mesh, kind, seed) => {
+    const ages = ['teen', 'adult', 'adult', 'elder']
+    const p = human({ age: ages[Math.abs(Math.floor(Math.sin(seed * 7) * 10000)) % ages.length], female: kind === 'cycle' || kind === 'cart' ? false : (seed % 5) === 0 })
+    lod.register(p) // full rig up close, 3-mesh proxy far away
+    const SCALE = { car: 0.66, truck: 0.8, bike: 0.88, auto: 0.85, van: 0.7, tractor: 0.9, cycle: 0.86, cart: 0.9 }
+    const SEAT = {
+      bike: [0, 0.5, -0.25], car: [-0.36, 0.05, 0.3], truck: [0, 0.12, 3.3],
+      auto: [0, 0.35, 0.1], van: [-0.4, 0.05, 1.5], tractor: [0, 0.95, -0.25],
+      cycle: [0, 0.9, -0.3], cart: [0, 0.9, -0.6]
+    }
+    p.root.scale.setScalar(SCALE[kind] || 0.85)
+    const seat = SEAT[kind] || [0, 0.5, 0]
+    p.root.position.set(seat[0], seat[1], seat[2])
+    p.root.rotation.y = Math.PI // facing the vehicle's +z forward
+    p.setPose(kind === 'bike' || kind === 'cycle' ? 'pillion' : 'sit')
+    mesh.add(p.root)
+    return p
+  }
+  // A believable Indian road: cars and bikes dominate, autos are common,
+  // with the odd tempo, tractor, cycle and bullock cart.
+  const kinds = ['car', 'bike', 'auto', 'truck', 'car', 'bike', 'auto', 'cycle', 'car', 'van', 'bike', 'tractor', 'car', 'cart', 'bike', 'truck', 'auto', 'car', 'cycle', 'car']
   for (let i = 0; i < count; i++) {
-    const kind = kinds[i % kinds.length], m = mkMesh(kind); m.visible = false; L.add(m)
-    vs.push({ m, kind, len: SPEC[kind].len, dir: i % 2 ? -1 : 1, d: 0, speed: 0, want: 12, pref: i % 3 === 0 ? 1 : 0, lat: 0, wait: R.range(0, 6), near: false, honkT: 0, lcT: 0 })
+    const kind = kinds[i % kinds.length], m = mkMesh(kind, i + 1); m.visible = false; L.add(m)
+    const rider = addRider(m, kind, 1000 + i * 37)
+    vs.push({ m, rider, kind, len: SPEC[kind].len, dir: i % 2 ? -1 : 1, d: 0, speed: 0, want: 12, pref: i % 3 === 0 ? 1 : 0, lat: 0, wait: R.range(0, 6), near: false, honkT: 0, lcT: 0 })
   }
   const respawn = (v, p0) => {
     const sp = SPEC[v.kind]; v.want = R.range(sp.v[0], sp.v[1]) * (o.speedMul || 1); v.speed = v.want * 0.8
@@ -62,11 +103,11 @@ export function makeTraffic(L, G, pts, o = {}) {
         const other = v.pref === 0 ? 1 : 0, ol = latOf(v.dir, lanes[other]); let free = true
         for (const w of vs) { if (w === v || w.dir !== v.dir) continue; if (Math.abs(w.lat - ol) < 2.4 && Math.abs(w.d - v.d) < 14) { free = false; break } }
         if (Math.abs(plat - ol) < 2.4 && Math.abs(p0 - v.d) < 14) free = false
-        if (free) { v.pref = other; v.lcT = 6 }
+        if (free) { v.pref = other; v.lcT = 6; if (G.audio.ctx && Math.random() < 0.5) G.audio.horn({ x: v.m.position.x, y: 1, z: v.m.position.z }, hornOf(v.kind)) }
       } else if (v.pref === 1 && gapNet > safe * 3 && v.lcT <= 0 && lanes.length > 1) { v.pref = 0; v.lcT = 5 }
       // ---- horn at whoever is in the way ----
       v.honkT -= dt
-      if (v.blockedByPlayer && gapNet < 9 && v.speed < v.want * 0.6 && v.honkT <= 0 && G.audio.ctx) { v.honkT = 3.5 + Math.random() * 2; G.audio.horn({ x: v.m.position.x, y: 1, z: v.m.position.z }, v.kind === 'truck' ? 'truck' : 'car') }
+      if (v.blockedByPlayer && gapNet < 9 && v.speed < v.want * 0.6 && v.honkT <= 0 && G.audio.ctx) { v.honkT = 3.5 + Math.random() * 2; G.audio.horn({ x: v.m.position.x, y: 1, z: v.m.position.z }, hornOf(v.kind)) }
       v.d += v.dir * v.speed * dt
       const out = v.dir > 0 ? v.d > p0 + 280 : v.d < p0 - 170
       if (out) { respawn(v, p0); v.wait = R.range(0, 8); v.lat = latOf(v.dir, lanes[0]); v.m.visible = false; continue }
@@ -75,10 +116,11 @@ export function makeTraffic(L, G, pts, o = {}) {
       // lateral position along the path normal; a small yaw during a lane change
       const nx = -Math.cos(q.yaw), nz = Math.sin(q.yaw), tgt = latOf(v.dir, lane), steer = (v.lat - tgt) * 0.04 * v.dir
       v.m.position.set(q.x + nx * v.lat, 0, q.z + nz * v.lat); v.m.rotation.y = yaw + steer; v.m.visible = true
+      if (v.rider) { v.rider.update(dt, v.speed); v.rider.root.rotation.z = steer * 1.6 }
       const dx = v.m.position.x - pl.x, dz = v.m.position.z - pl.z, dist = Math.hypot(dx, dz)
-      if (!v.near && dist < 40) { v.near = true; if (G.audio.ctx) { const a = { x: v.m.position.x, y: 1, z: v.m.position.z }; G.audio.passBy(a, { x: pl.x, y: 1, z: pl.z }, 3.5, v.kind === 'truck' ? 'truck' : 'car'); if (Math.random() < 0.3) setTimeout(() => G.audio.horn(a, v.kind === 'truck' ? 'truck' : 'car'), 900) } }
+      if (!v.near && dist < 40) { v.near = true; if (G.audio.ctx) { const a = { x: v.m.position.x, y: 1, z: v.m.position.z }; G.audio.passBy(a, { x: pl.x, y: 1, z: pl.z }, 3.5, hornOf(v.kind)); if (Math.random() < 0.55) setTimeout(() => G.audio.horn(a, hornOf(v.kind)), 900) } }
       // crashes: fast into a vehicle (or a vehicle into a walker) is a real accident; a gentle touch just shoves
-      const rad = v.kind === 'truck' ? 2.6 : v.kind === 'bike' ? 1.3 : 2.0
+      const rad = RAD[v.kind] || 2.0
       if (dist < rad && riding && Math.abs(G.scooter.speed) > 3) { v.speed = 0; v.wait = 4; startCrash(G, { x: pl.x, z: pl.z }); continue }
       if (dist < rad && riding) { const c = G.scooter.chassis; c.velocity.x += (dx > 0 ? -1 : 1) * 2.2; c.velocity.z *= 0.8; G.camShake(0.4); if (G.audio.ctx) G.audio.thud(null, 0.5) }
       else if (dist < 1.4 && !riding && v.speed > 4) { v.speed = 0; v.wait = 3; startCrash(G, { x: pl.x, z: pl.z }); continue }

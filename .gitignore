@@ -6,3 +6,5 @@ release/
 .DS_Store
 shots/
 tools/models/
+# Locally cloned UI/UX Pro Max skill pack (reference only, not part of the app)
+.ui-ux-pro-max/

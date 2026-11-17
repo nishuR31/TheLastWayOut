@@ -2,15 +2,34 @@
 // Serves the Vite build from a privileged app:// scheme so ES modules, dynamic imports and WebAudio work without file:// restrictions.
 const { app, BrowserWindow, protocol, net, ipcMain, Menu } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const { pathToFileURL } = require('url')
 
 const dist = path.join(__dirname, '..', 'dist')
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 app.commandLine.appendSwitch('ignore-gpu-blocklist')
 app.commandLine.appendSwitch('enable-gpu-rasterization')
-// Ubuntu 23.10+ restricts unprivileged user namespaces. The sandbox stays ON by
-// default; opt out explicitly with TLWO_NO_SANDBOX=1 only if Electron cannot start.
-if (process.env.TLWO_NO_SANDBOX === '1') app.commandLine.appendSwitch('no-sandbox')
+// Sandbox policy: explicit TLWO_NO_SANDBOX wins. Otherwise keep the sandbox ON,
+// but auto-detect the common Ubuntu/Debian case where Electron's chrome-sandbox
+// helper is present yet not owned by root + setuid (Chromium aborts otherwise).
+const envSandbox = process.env.TLWO_NO_SANDBOX
+let noSandbox = envSandbox === '1'
+if (!envSandbox && !app.isPackaged) {
+  try {
+    const helper = path.join(__dirname, '..', 'node_modules', 'electron', 'dist', 'chrome-sandbox')
+    const st = fs.statSync(helper)
+    const configured = st.uid === 0 && (st.mode & 0o4000) !== 0
+    if (!configured) {
+      noSandbox = true
+      console.warn('[TLWO] chrome-sandbox is not setuid-root (uid=' + st.uid + ', mode=' + (st.mode & 0o7777).toString(8) + '); starting with --no-sandbox.')
+      console.warn('[TLWO] Proper fix: sudo chown root:root "' + helper + '" && sudo chmod 4755 "' + helper + '"')
+    }
+  } catch (e) {
+    noSandbox = true
+    console.warn('[TLWO] Could not verify chrome-sandbox (' + e.message + '); starting with --no-sandbox.')
+  }
+}
+if (noSandbox) app.commandLine.appendSwitch('no-sandbox')
 
 // No corsEnabled on the privileged file-serving scheme: it would allow cross-origin reads.
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
