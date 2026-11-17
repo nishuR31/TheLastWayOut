@@ -7,161 +7,32 @@ const P = () => G.player
 // freeze the player's feet (not the camera) for the length of a scene
 async function still(fn) { const p = P(); p.canMove = false; try { await fn() } finally { p.canMove = true } }
 
-/* ------------------------------------------------------------------ CH 5 */
-export async function ch5(s) {
-  setTime(2.6, 0, false, true)
-  const L = await load('night', { env: 'rain', scooter: true }, { dx: 1.2 })
-  const c = G.comp, W = L.walkPts
-  G.hasSignal = false; G.torchOn = true
-  await startScene(1.8)
-  ui.titleCard('CHAPTER 5', 'Aur andar', '2:40 AM', 3.4)
-  G.clockRate = 12; fear(0.35); tired(0.75)
-  ui.toast('Scooter dhakelte hue raaste par chalte raho', 5)
-  await T('Roshni dhoondhni hai. Koi ghar, koi sadak... kuch bhi.', 'We need to find a light. A house, a road... anything.', { dur: 3.2 })
-  await N('Torch jalaye rakh. Dheere chalte hain.', 'Keep the torch on. We go slow.')
-
-  // 1. payal from one side; Nishant turns, nothing there
-  await goTrail(W, 22)
-  audio.payal(L.refs.siris, 0)
-  await wait(1.2)
-  c.look(L.refs.siris)
-  await T('...', '(Nishant turns his head toward the sound)', { voice: false, dur: 1.6 })
-  await wait(1.6); c.look(null)
-  caption('[a faint jingle of anklets from the side - only leaves in the torch beam]', 3.4)
-  await wait(2.4)
-  // 2. footsteps that keep going after both stop
-  await goTrail(W, 56)
-  await still(async () => {
-    await T('Ruk...', 'Hold on...', { dur: 1.4 })
-    compHold(c.pos.x, c.pos.z)
-    await wait(1.8)
-    stepsAt(around(6, Math.PI, 0.6), 5, 0.62)
-    await wait(3.6)
-    await T('Tune suna?', 'Did you hear that?')
-    await N('Kya?', 'What?')
-    await T('Jaise koi chal raha tha.', 'Like someone was walking.')
-    await N('Hum dono hi toh chal rahe hain.', 'We are the ones walking.')
-    await T('Nahi... rukne ke baad bhi awaaz aa rahi thi.', 'No... the sound kept coming after we stopped.', { dur: 3 })
-    compFollow()
-  })
-  reveal('steps')
-  // 3. wind close to the ear
-  await goTrail(W, 70)
-  audio.puff(-1); G.camShake(0.25)
-  await N('Kaan ke paas se hawa... ya kisi ne...', 'Wind right by my ear... or someone...', { dur: 2.6 })
-  await T('Hawa hi hogi. Chalte raho.', 'It must be the wind. Keep walking.')
-  reveal('puff')
-  // 4. a bush moves while the torch is elsewhere
-  await goTrail(W, 80)
-  await gate(() => lookedAway(L.refs.bushPos, 0.2), null, 12)
-  L.shaky.shake(); audio.rustle(L.refs.bushPos, 1)
-  await wait(1.2)
-  await T('Wo jhaadi... hili na?', 'That bush... it moved, didn\'t it?', { dur: 2.4 })
-  await lookFor(L.refs.bushPos, 1.0, 0.9)
-  await wait(0.8); audio.rustle(L.refs.bushPos, 0.4)
-  caption('[something small scurries off through the undergrowth]', 3)
-  await N('Koi chuha ya nevla hoga.', 'Probably a rat or a mongoose.')
-  reveal('animals')
-  // 5. a bent tree that looks like a person
-  await goTrail(W, 104)
-  await lookFor(L.refs.bent, 1.0, 0.94)
-  await T('Wahan... koi khada hai.', 'Someone... is standing there.', { dur: 2.4 })
-  await N('Torch daal.', 'Shine the torch.', { dur: 1.4 })
-  await wait(1.8)
-  await go(L.refs.bent.x + 3.5, L.refs.bent.z - 4, 5)
-  await N('Ped hai bas. Tedha sa.', 'It\'s just a tree. A crooked one.', { dur: 2.4 })
-  await T('Hum jaante hain. Phir bhi dil ghabra raha hai.', 'We know. My heart still races.', { dur: 2.8 })
-  reveal('shadow')
-  await N('Yahan khade rehne se kuch nahi hoga. Chalte hain.', 'Standing still isn\'t helping. Let\'s go on.')
-  // 6. arrive at the peepal
-  await goTrail(W, trailLen(W) - 4)
-  await T('Dekh, peepal ka bada ped. Thodi der baith lete hain.', 'Look, a big peepal tree. Let\'s rest a moment.', { dur: 3.2 })
-  await wait(0.6)
-  await endScene(1.6)
-}
-
-/* ------------------------------------------------------------------ CH 6 */
-export async function ch6(s) {
-  setTime(3.1, 0, false, true)
-  const L = await load('night', { env: 'rain', scooter: true, push: false, light: false }, { dx: 1.2 })
-  const c = G.comp, p = P()
-  G.hasSignal = false; G.torchOn = true
-  enableTrail(L, 'away', false); enableTrail(L, 'village', false)
-  G.scooter.place(3.3, 166, 0.9)
-  G.teleportPlayer(1.2, 163.5, 0.4)
-  c.place(-1.8, 166.5, 0.6); c.mode = 'hold'; c.holdPos = { x: -1.8, z: 166.5 }
-  await startScene(1.8)
-  ui.titleCard('CHAPTER 6', 'Peepal aur roshni', '3:10 AM', 3.4)
-  G.clockRate = 8; fear(0.3); tired(0.9)
-  await wait(1.5)
-  c.pose('rub')
-  await N('Saans phool gayi hai. Do minute.', 'I\'m out of breath. Two minutes.')
-  await T('Phone dekh.', 'Check the phone.')
-  ui.toast('P — phone dekho', 3)
-  G.checkPhone(); await wait(2.4)
-  await N('Ab bhi koi network nahi.', 'Still no network.')
-  await T('Log kehte hain peepal ke neeche raat ko nahi rukte...', 'People say you shouldn\'t stay under a peepal at night...', { dur: 3.2 })
-  await N('Gila hone se behtar hai ek ped ke neeche hona. Kahaniyaan baad mein.', 'Better a tree than getting soaked. Stories can wait.', { dur: 3.2 })
-  reveal('peepal')
-  await wait(5)
-  // the light
-  L.setLight(true)
-  ui.toast('Door ek roshni... dhyaan se dekho', 4)
-  await lookFor(L.lightPos, 1.0, 0.985)
-  await T('Wo dekh! Roshni!', 'Look there! A light!', { dur: 2 })
-  c.look(L.lightPos)
-  await N('Chhoti si hai... jhilmilaa rahi hai.', 'It\'s small... it flickers.', { dur: 2.6 })
-  await wait(2)
-  await T('Kisi ghar ki lagti hai. Ya lantern.', 'Looks like a house. Or a lantern.', { dur: 2.6 })
-  c.look(null); compFollow()
-  await N('Chal, paas jaake dekhte hain.', 'Come on, let\'s go and see.')
-  ui.toast('Roshni ki taraf chalo (peepal ke uttar mein)', 4.5)
-  pushOn()
-  // approaching: it turns out to be a village
-  await goTrail(L.toLightPts, 36)
-  await wait(0.5)
-  L.light.scale.multiplyScalar(1.7)
-  await T('Ye toh... gaon jaisa lag raha hai. Kai roshniyaan.', 'This looks like a village. Several lights.', { dur: 3.2 })
-  await N('Jungle ke beech gaon? Yahan?', 'A village in the middle of a forest? Here?', { dur: 2.6 })
-  await T('Tune woh videos dekhe hain na? Roshni ke peeche gaye, aur...', 'You\'ve seen those videos, right? People who followed a light, and...', { dur: 3.4 })
-  await N('Ulta chalte hain. Jahan se aaye, uske ulta.', 'Let\'s go the other way. Opposite to this.', { dur: 3 })
-  L.setLight(false)
-  ui.toast('Wapas peepal tak. Phir doosri taraf.', 4)
-  await go(0, 168, 6)
-  enableTrail(L, 'away', true); enableTrail(L, 'toLight', false)
-  ui.toast('Doosri taraf chalo (pashchim)', 4)
-  await goTrail(L.awayPts, trailLen(L.awayPts) - 5)
-  // the same light again
-  setTime(3.35, 0, false, true)
-  await wait(1)
-  L.setLight(true); L.light.scale.setScalar(1)
-  await N('...', '(you stop. The same flickering light shows ahead.)', { voice: false, dur: 2.8 })
-  c.look(L.lightPos)
-  await N('Humne toh ulta rasta liya tha.', 'We took the opposite route.', { dur: 2.4 })
-  await T('Haan. Phir wahi roshni kaise?', 'Yes. Then how is it the same light?', { dur: 2.6 })
-  await N('Ho sakta hai doosri side se dikh raha ho.', 'Maybe it just looks like that from the other side.', { dur: 2.8 })
-  await T('Ya hum phir wahi aa gaye.', 'Or we\'ve come back to the same spot.', { dur: 2.6 })
-  c.look(null)
-  reveal('light', 'again')
-  await wait(2.5)
-  await N('Hum aise baarish mein bhatakte nahi reh sakte.', 'We can\'t keep wandering in this rain.', { dur: 3 })
-  await T('Chal. Kuch bhi ho, kisi se madad toh maangni hi padegi.', 'Come on. Whatever happens, we have to ask someone for help.', { dur: 3.6 })
-  enableTrail(L, 'village', true)
-  await goTrail(L.villagePts, 52)
-  await endScene(1.8)
-}
-
 /* ------------------------------------------------------------------ CH 7 + 8 */
 export async function ch7(s) {
   setTime(3.3, 0, false, true)
-  const L = await load('village', { scooter: true }, { dx: 1.2 })
+  const L = await load('village', {}, { dx: 1.2 })
   const H = L.house, c = G.comp, p = P()
   G.hasSignal = false; G.torchOn = true; G.env.set('still')
   await startScene(1.8)
   ui.titleCard('CHAPTER 7', 'Gaon', '3:20 AM', 3.4)
   G.clockRate = 6; fear(0.35); tired(0.85)
   await wait(1)
-  ui.toast('Lane ke aakhir tak chalo', 4)
+  // ANY door can be knocked on. Only one house (picked at random) ever opens: the uncle comes out of that one.
+  const cand = [...(L.doorHouses || []), H]
+  const pick = cand[Math.floor(Math.random() * cand.length)]
+  const nk = new Map(); let answered = null, knocks = 0
+  for (const hs of cand) {
+    const kpos = hs === H ? L.refs.knock : hs.doorWorld
+    G.addInteract({ pos: kpos, label: 'Darwaza khatkhatao', r: 3, cone: 0.2, key: 'E', once: false, onUse: () => {
+      if (answered) return
+      const n = (nk.get(hs) || 0) + 1; nk.set(hs, n); knocks++
+      audio.knock(kpos, n > 1 ? 5 : 3, n > 1 ? 1.3 : 1); caption('[knock, knock]', 1.4); if (hs !== H) { L.flashEyes(hs); G.horrorTurn(V(hs.doorWorld.x, 1.7, hs.doorWorld.z), 0.5, 0.45, 0.1) }
+      if (hs === pick && n >= 2) { answered = hs; return }
+      if (knocks === 1) T('Koi nahi khol raha...', 'Nobody is opening...', { dur: 2 })
+      else if (knocks === 3) N('Andar roshni hai. Fir bhi koi aawaz nahi.', 'There is light inside. Still no sound.', { dur: 2.6 })
+      else if (knocks === 5) T('Koi toh hoga. Doosra ghar try karte hain.', 'Somebody must be home. Try another house.', { dur: 2.8 })
+    } })
+  }
   await N('Gaon hi hai. Ghar, gali, lalten.', 'It is a village. Houses, lanes, lanterns.', { dur: 3 })
   await T('Na khambe, na taar. Bijli nahi lagti yahan.', 'No poles, no wires. They don\'t seem to have electricity.', { dur: 3.2 })
   await gate(() => trailD(L.lanePts) > 20, () => snapTo(0, 22), 0, [0, 22, 'Gali mein aage chalo · Walk down the lane'])
@@ -170,37 +41,35 @@ export async function ch7(s) {
   await N('Us khidki mein... kuch safed sa tha. Aankhon jaisa.', 'In that window... something white. Like eyes.', { dur: 3.2 })
   await T('Mat dekh. Pehle madad dhoondh.', 'Don\'t look. Find help first.', { dur: 2.4 })
   reveal('village', 'eyes')
-  await gate(() => G.distToPlayer(0, 52) < 5, () => snapTo(0, 52), 0, [0, 52, 'Gali ke aakhir mein ghar · The house at the end of the lane'])
-  pushOff()
-  G.scooter.place(-2.9, 53, 0.4); G.noRun = false
-  c.mode = 'follow'
-  // THE KNOCKING
-  ui.toast('E — darwaza khatkhatao', 4)
-  await use(L.refs.knock, 'Darwaza khatkhatao', { r: 4, cone: -1 })
-  audio.knock(L.refs.knock, 2, 1); caption('[knock, knock]', 1.6)
-  await wait(4)
-  await T('Koi nahi aaya.', 'Nobody came.', { dur: 1.8 })
-  await use(L.refs.knock, 'Zor se khatkhatao', { r: 4, cone: -1 })
-  audio.knock(L.refs.knock, 4, 1.3)
-  await wait(4.5)
-  await N('Uncle! Koi hai?', 'Hello! Anyone home?', { dur: 2 })
-  audio.knock(L.refs.knock, 5, 1.2); await wait(1.8)
-  audio.knock(L.refs.knock, 5, 1.2); await wait(1.8)
-  audio.knock(L.refs.knock, 6, 1.2)
-  await wait(4.5)
-  // the uncle opens
-  const din = L.refs.doorIn, dout = L.refs.doorOut
+  ui.toast('Kisi bhi ghar ka darwaza khatkhatao (E) · Knock on any door', 5)
+  ui.objective('Madad ke liye kisi ghar ka darwaza khatkhatao · Knock on a door for help')
+  await gate(() => !!answered, () => { answered = pick }, 0)
+  ui.objective(null); pushOff(); G.noRun = false; c.mode = 'follow'
+  await wait(2.2)
+  // the uncle opens (whichever house it was)
+  let din = L.refs.doorIn, dout = L.refs.doorOut, door = L.refs.knock
+  if (pick !== H) { const f = { x: Math.sin(pick.rot), z: Math.cos(pick.rot) }; door = pick.doorWorld; din = { x: door.x - f.x * 1.0, z: door.z - f.z * 1.0 }; dout = { x: door.x + f.x * 1.6, z: door.z + f.z * 1.6 } }
   const un = spawn('uncle', din.x, din.z, Math.atan2(dout.x - din.x, dout.z - din.z))
   un.pose('stand'); un.face(dout)
-  H.setDoor(true); audio.door(L.refs.knock, true)
+  pick.setDoor(true); audio.door(door, true)
   await wait(2.2)
   un.look(G.camera.position)
   await U('Kaun hai? Itni raat ko?', 'Who is it? At this hour?', { pos: un.pos, dur: 2.6 })
   await N('Namaste uncle. Hum log raasta bhatak gaye hain.', 'Namaste, uncle. We\'ve lost our way.', { dur: 3 })
   await T('Jungle mein aa gaye the. Ab bahar nikalne ka raasta nahi mil raha.', 'We came into the forest. Now we can\'t find the way out.', { dur: 3.6 })
   await N('Phone mein network bhi nahi hai. Ghar pe bata nahi paaye.', 'There\'s no phone network either. We couldn\'t tell home.', { dur: 3.6 })
-  await U('Andar aao. Pehle baitho. Bahar bahut baarish hai.', 'Come in. Sit first. It is raining hard outside.', { pos: un.pos, dur: 3.4 })
-  un.look(null)
+  if (pick === H) {
+    await U('Andar aao. Pehle baitho. Bahar bahut baarish hai.', 'Come in. Sit first. It is raining hard outside.', { pos: un.pos, dur: 3.4 })
+    un.look(null)
+  } else {
+    await U('Yeh mera ghar nahi, main yahan baitha tha. Mera ghar gali ke aakhir mein hai. Chalo, wahan baithte hain.', 'This isn\'t my house, I was just sitting here. Mine is at the end of the lane. Come, we\'ll sit there.', { pos: un.pos, dur: 5 })
+    un.look(null); ui.toast('Uncle ke peeche chalo · Follow the uncle', 4)
+    un.walkTo(L.refs.doorOut.x, L.refs.doorOut.z, 1.5)
+    await gate(() => G.distToPlayer(L.refs.doorOut.x, L.refs.doorOut.z) < 4.5, () => snapTo(L.refs.doorOut.x, L.refs.doorOut.z - 3), 0, [L.refs.doorOut.x, L.refs.doorOut.z, 'Uncle ke ghar tak · To the uncle\'s house'])
+    un.place(L.refs.doorOut.x, L.refs.doorOut.z, Math.atan2(L.refs.doorIn.x - L.refs.doorOut.x, L.refs.doorIn.z - L.refs.doorOut.z))
+    H.setDoor(true); audio.door(L.refs.knock, true)
+    await U('Andar aao. Pehle baitho. Bahar bahut baarish hai.', 'Come in. Sit first. It is raining hard outside.', { pos: un.pos, dur: 3.4 })
+  }
   // ---------------- CH 8: inside
   ui.toast('Andar chalo', 3)
   un.walkTo(L.refs.uncleSpot.x, L.refs.uncleSpot.z, 1.2)
@@ -239,6 +108,14 @@ export async function ch7(s) {
   const e1 = makeGlass(false), e2 = makeGlass(false); e1.position.copy(g1.position); e2.position.copy(g2.position); L.group.add(e1, e2)
   await T('Accha laga. Garm sa.', 'That was good. Warming.', { dur: 2.2 })
   await N('Shukriya uncle.', 'Thank you, uncle.', { dur: 1.8 })
+  if (s.fire && s.fire.made) {
+    await U('(Nishan ki jeb ki taraf dekhkar) Aag jalayi thi?', '(looking at Nishan\'s pocket) You lit a fire?', { pos: un.pos, dur: 3 })
+    await N('Haan uncle. Bike ke plug se.', 'Yes, uncle. With the bike\'s spark plug.', { dur: 2.4 })
+    await U('Aag achhi cheez hai. Par aag ko yahan lekar mat aana.', 'Fire is a good thing. But do not bring fire here.', { pos: un.pos, dur: 3.6 })
+    await N('Kyun?', 'Why?', { dur: 1.2 })
+    await U('Bas aise hi. Chai peeyoge?', 'No reason. Will you have tea?', { pos: un.pos, dur: 2.4 })
+    reveal('drink')
+  }
   // the request
   await N('Uncle, aapke paas phone hai? Hum ghar par bata dein.', 'Uncle, do you have a phone? We need to tell home.', { dur: 3.2 })
   await U('Phone toh kisi ke paas nahi hai abhi.', 'Nobody has a phone available right now.', { pos: un.pos, dur: 2.6 })
@@ -253,6 +130,12 @@ export async function ch7(s) {
   await N('Bheeg ke aaye hain, thand lagi hogi. Chalna padega.', 'We came soaked, it\'s the cold. We have to move.', { dur: 3 })
   await wait(0.8)
   await U('Theek hai. Main khud chalta hoon tumhare saath. Do dost ko bhi bula leta hoon.', 'All right. I\'ll come with you myself. I\'ll call two friends too.', { pos: un.pos, dur: 4 })
+  await U('Beta, tum aaj ek galti kar rahe ho.', 'Child, you are making a mistake tonight.', { pos: un.pos, dur: 3 })
+  await T('Kaisi galti?', 'What mistake?', { dur: 1.6 })
+  await U('(muskurakar) Kuch nahi. Chalo.', '(smiling) Nothing. Come.', { pos: un.pos, dur: 2 })
+  await say('Beti', 'Jaldi aana.', 'Come back soon.', { pos: dg.pos, dur: 2 })
+  await N('Kya?', 'What?', { dur: 1.2 })
+  await say('Beti', 'Kuch nahi.', 'Nothing.', { pos: dg.pos, dur: 1.6 })
   p.canMove = true
   await wait(1.2)
   await endScene(1.8)

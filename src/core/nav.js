@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id)
 const TAU = Math.PI * 2
 const norm = (a) => { a %= 360; if (a > 180) a -= 360; if (a <= -180) a += 360; return a }
 const CARD = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+let _wpv = null // lazy scratch vector for the per-frame waypoint projection
 const TITLES = {
   home: 'Ghar aur gali · Home & street', road: 'Jungle ki sadak · The road', forest: 'Jungle · The forest', bamboo: 'Baans ka jhund · Bamboo grove',
   night: 'Raat ka jungle · Night forest', village: 'Gaon · The village', escort: 'Jungle ka raasta · Forest path', shamshan: 'Shamshan · Cremation ground',
@@ -170,7 +171,7 @@ export const nav = {
     const G = this.G, el = $('wp'); if (!el) return
     if (!goal || this.mode === 'off' || G.paused || !G.camera) { el.style.opacity = 0; return }
     const cam = G.camera; cam.updateMatrixWorld()
-    const v = new G.THREE.Vector3(goal.x, (goal.y ?? 0) + 1.6, goal.z).project(cam)
+    const v = (_wpv || (_wpv = new G.THREE.Vector3())).set(goal.x, (goal.y ?? 0) + 1.6, goal.z).project(cam)
     if (v.z > 1 || Math.abs(v.x) > 0.96 || Math.abs(v.y) > 0.92) { el.style.opacity = 0; return }
     el.style.left = ((v.x * 0.5 + 0.5) * innerWidth).toFixed(0) + 'px'; el.style.top = ((-v.y * 0.5 + 0.5) * innerHeight).toFixed(0) + 'px'
     const d = Math.hypot(goal.x - pose.x, goal.z - pose.z); $('wp-d').textContent = Math.round(d) + ' m'

@@ -4,6 +4,7 @@ import { forestLevel, clearing, nightTick, windSway } from '../world/common.js'
 import { makeBambooClump, makeRock, makeLog } from '../world/nature.js'
 import { audio } from '../core/audio.js'
 import { R } from '../core/util.js'
+import { makeMirage } from '../world/mirage.js'
 
 export function build(G, opts = {}) {
   G.env.set(opts.env || 'storm', true)
@@ -16,9 +17,18 @@ export function build(G, opts = {}) {
   windSway(L, G, sw)
   const log = makeLog(2.4, 0.2); log.position.set(-3, 0.2, 47); log.rotation.y = 0.9; L.add(log)
   const rk = makeRock(0.8); rk.position.set(3.4, 0.22, 46); L.add(rk); L.walk.circle(3.4, 46, 0.7)
+  if (!opts.story) L.refs.firePit = { x: 0.6, z: 44.2 }
   L.refs.seat = new THREE.Vector3(-3, 0.5, 47); L.refs.rock = new THREE.Vector3(3.4, 0.6, 46)
   L.bambooNear = (x, z) => { let m = 99; for (const p of pos) m = Math.min(m, Math.hypot(x - p[0], z - p[1])); return m }
   L.isIndoors = (x, z) => (Math.hypot(x, z - 47) < 6 ? 0.9 : 0)
+  // a small stream with smooth stones (fire ring), a hollow stump, and the far village glow
+  const stm = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 40), new THREE.MeshStandardMaterial({ color: '#4d6f7c', roughness: 0.1, metalness: 0.6, transparent: true, opacity: 0.8 })); stm.rotation.x = -Math.PI / 2; stm.position.set(-20, 0.03, 52); L.add(stm)
+  L.refs.stones = [[-17.5, 49], [-17, 51.5], [-18, 54], [-16.8, 47], [-17.6, 56], [-16.9, 52.8]]
+  L.refs.stones.forEach(([x, z]) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshStandardMaterial({ color: '#8a8880', roughness: 0.7 })); m.scale.set(1.2, 0.7, 1); m.position.set(x, 0.1, z); L.add(m) })
+  const stump = new THREE.Group(); { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.48, 0.8, 9), new THREE.MeshStandardMaterial({ color: '#4a3826', roughness: 1 })); c.position.y = 0.4; stump.add(c); for (let i = 0; i < 6; i++) { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.5, 5), new THREE.MeshStandardMaterial({ color: '#b8b2a4', roughness: 1 })); t.position.set(-0.12 + (i % 3) * 0.12, 0.85, -0.07 + Math.floor(i / 3) * 0.14); t.rotation.z = (i % 2 ? 0.1 : -0.1); stump.add(t) } }
+  stump.position.set(-9.5, 0, 62); L.add(stump); L.walk.circle(-9.5, 62, 0.5); L.refs.stump = new THREE.Vector3(-9.5, 0.9, 62)
+  L.lightPos = new THREE.Vector3(18, 2.2, 270); L.mirage = makeMirage(L, G); L.mirage.place(L.lightPos.x, L.lightPos.z)
+  L.setLight = (v) => { if (v) L.mirage.place(L.lightPos.x, L.lightPos.z); L.mirage.show(v) }
   L.spawn = { x: 0, z: -8, yaw: 0 }
   L.surface = () => 'mud'
   let dripT = 0

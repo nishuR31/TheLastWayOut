@@ -3,8 +3,13 @@ import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
 import { tex } from './textures.js'
 import { clamp, damp } from '../core/util.js'
+import { makeKeyMesh } from './viewmodel.js'
 
 const M = (o) => new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1, ...o })
+// scratch objects reused by the per-frame physics helpers
+const _q = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0)
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3()
+const _e = new THREE.Euler()
 
 export class Scooter {
   constructor(G, color = '#27508f') {
@@ -25,6 +30,8 @@ export class Scooter {
     mk(new THREE.BoxGeometry(0.07, 0.07, 0.03), new THREE.MeshStandardMaterial({ color: '#600', emissive: '#f00', emissiveIntensity: 0.25 }), 0, 0.5, -0.7)
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.09), new THREE.MeshStandardMaterial({ map: tex.sign('MP 04 NN 5721', '#f3f3f0', '#111', 512, 128, '700 62px Inter, sans-serif') })); plate.position.set(0, 0.33, -0.705); plate.rotation.y = Math.PI; this.lean_g.add(plate)
     mk(new THREE.BoxGeometry(0.3, 0.05, 0.4), dark, 0, 0.7, -0.02).visible = false
+    // ignition key (shown while the key is in)
+    { const fx = this.keyFix = new THREE.Group(); fx.position.set(0, 1.03, 0.34); fx.rotation.y = Math.PI; const inner = new THREE.Group(); inner.add(makeKeyMesh()); fx.add(inner); fx.userData.inner = inner; fx.visible = false; this.lean_g.add(fx) }
     // hook for tiffin/bag
     mk(new THREE.BoxGeometry(0.02, 0.06, 0.04), chrome, 0, 0.75, 0.3)
     // front fork + wheel
@@ -59,21 +66,22 @@ export class Scooter {
   place(x, z, yaw = 0) {
     const c = this.chassis; c.position.set(x, 0.62, z); c.velocity.set(0, 0, 0); c.angularVelocity.set(0, 0, 0); c.quaternion.setFromEuler(0, yaw, 0); this.steer = 0; this.lean = 0
   }
-  get yaw() { const q = this.chassis.quaternion; return new THREE.Euler().setFromQuaternion(new THREE.Quaternion(q.x, q.y, q.z, q.w), 'YXZ').y }
+  get yaw() { const q = this.chassis.quaternion; _q.set(q.x, q.y, q.z, q.w); return _e.setFromQuaternion(_q, 'YXZ').y }
   get speed() { return this.vehicle.currentVehicleSpeedKmHour / 3.6 }
   fwd() { const y = this.yaw; return new THREE.Vector3(Math.sin(y), 0, Math.cos(y)) }
   setPunctured(v) { this.punctured = v; const s = v ? 0.55 : 1; this.wheelR.scale.set(1, s, 1); this.wheelR.position.y = v ? 0.17 : 0.21 }
   stabilize(dt) {
-    const q = this.chassis.quaternion, qq = new THREE.Quaternion(q.x, q.y, q.z, q.w)
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qq)
-    const ax = new THREE.Vector3().crossVectors(up, new THREE.Vector3(0, 1, 0)) // axis that rotates up -> world up
+    const q = this.chassis.quaternion, qq = _q.set(q.x, q.y, q.z, q.w)
+    const up = _v1.set(0, 1, 0).applyQuaternion(qq)
+    const ax = _v2.crossVectors(up, _up) // axis that rotates up -> world up
     const k = 40, av = this.chassis.angularVelocity
     av.x += ax.x * k * dt; av.z += ax.z * k * dt
     av.x *= 1 - Math.min(1, 6 * dt); av.z *= 1 - Math.min(1, 6 * dt)
   }
   uprightCheck(dt) {
     this.stabilize(dt)
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(new THREE.Quaternion(this.chassis.quaternion.x, this.chassis.quaternion.y, this.chassis.quaternion.z, this.chassis.quaternion.w))
+    const q = this.chassis.quaternion
+    const up = _v1.set(0, 1, 0).applyQuaternion(_q.set(q.x, q.y, q.z, q.w))
     if (up.y < 0.6) { this._tip = (this._tip || 0) + dt; if (this._tip > 0.5) { const p = this.chassis.position; this.place(p.x, p.z, this.yaw); this._tip = 0 } } else this._tip = 0
   }
   // controls: throttle -1..1, steer -1..1, brake bool, maxSpeed m/s

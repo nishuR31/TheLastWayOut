@@ -1,62 +1,170 @@
-// The ride out of town: shops -> fields -> forest edge. Evening light fading.
+// One continuous world: our house and lane (opts.home) flow straight into the long road to the forest.
+// Along the road: town traffic, a stuck truck, a petrol pump, a puncture shop, a roadside temple, the dhaba, the forest-edge board.
 import * as THREE from 'three'
-import { Level, pole, wires, teaStall, signboard, buildHouse, streetLight, truck, bush, bx, cyl } from '../world/build.js'
+import { Level, pole, wires, teaStall, signboard, buildHouse, streetLight, truck, table, charpai, fan, bush, bx, cyl, sph, motorbike } from '../world/build.js'
 import { scatterForest, makePalm } from '../world/nature.js'
-import { smoothPts, polyLen, projDist } from '../world/common.js'
+import { makeTraffic } from '../world/traffic.js'
+import { placePits } from '../core/roam.js'
+import { smoothPts, polyLen, projDist, ptAt } from '../world/common.js'
 import { tex } from '../world/textures.js'
-import { R } from '../core/util.js'
+import { R, nearestOnPoly } from '../core/util.js'
+import { populateHome } from './home.js'
+
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, ...o })
 
 export function build(G, opts = {}) {
   const L = new Level(G, 'road')
-  G.env.set('evening', true)
-  const raw = [[0, -20], [0, 60], [6, 140], [-8, 230], [-10, 320], [4, 410], [18, 500], [10, 590], [-4, 680], [-6, 760]]
+  G.env.set('day', true)
+  // the old forward-running road rotated to run along +x, starting at the far end of our lane
+  const raw = [[-30, 15], [110, 15], [190, 9], [280, 23], [370, 25], [460, 11], [550, -3], [640, 5], [730, 19], [810, 21]]
   const pts = smoothPts(raw, 8)
   const len = polyLen(pts)
   L.roadLen = len; L.pts = pts
-  L.ground(700, 1100, 'grass', 7, 0, 380, 0xe0e8d0)
-  L.ribbon(pts, 3.1, 'road', 6, 0.012)
-  L.ribbon(pts.map(p => ({ x: p.x - 0.02, z: p.z })), 4.1, 'mud', 4, 0.006)
-  // extend the drivable corridor 45 m past the last point so the scooter never hits a hard dead end before the story gate
+  L.ground(1300, 760, 'grass', 7, 380, 40, 0xe0e8d0)
+  // the carriageway: a 2-lane lane by the house, a 4-lane city road through town, then back down to 2 lanes into the forest
+  const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z))
+  const hwAt = (d) => d < 140 ? 4.2 : d < 200 ? 4.2 + (d - 140) / 60 * 2.6 : d < 440 ? 6.8 : d < 520 ? 6.8 - (d - 440) / 80 * 3.4 : 3.4
+  L.hwAt = hwAt
+  L.ribbon(pts, (i) => hwAt(cum[i]), 'road', 6, 0.012, 0xffffff, false)
+  L.ribbon(pts.map(p => ({ x: p.x, z: p.z - 0.02 })), (i) => hwAt(cum[i]) + 1.5, 'mud', 4, 0.006, 0xffffff, false)
+  // lane markings: centre (double yellow in the 4-lane stretch, dashed otherwise), lane dashes, solid edge lines
+  const mark = (offFn, d0, d1, step, segLen, color, wdt = 0.16) => {
+    const n = Math.max(1, Math.floor((d1 - d0) / step)), im = new THREE.InstancedMesh(new THREE.BoxGeometry(wdt, 0.012, segLen), new THREE.MeshBasicMaterial({ color }), n), m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), p4 = new THREE.Vector3(), s4 = new THREE.Vector3(1, 1, 1); let c = 0
+    for (let d = d0; d < d1 && c < n; d += step) { const a2 = ptAt(pts, d), off = offFn(d); e4.set(0, a2.yaw, 0); q4.setFromEuler(e4); p4.set(a2.x - Math.cos(a2.yaw) * off, 0.022, a2.z + Math.sin(a2.yaw) * off); im.setMatrixAt(c++, m4.compose(p4, q4, s4)) }
+    im.count = c; im.instanceMatrix.needsUpdate = true; im.frustumCulled = false; L.add(im)
+  }
+  mark(() => 0, 3, 200, 7, 2.4, '#e8e2c8'); mark(() => 0, 440, len - 3, 8, 2.6, '#e8e2c8')            // dashed centre, 2-lane roads
+  mark(() => 0.14, 200, 440, 3.2, 3.2, '#d8b020'); mark(() => -0.14, 200, 440, 3.2, 3.2, '#d8b020')   // double yellow, 4-lane
+  mark(() => 3.5, 200, 440, 9, 3, '#e8e2c8'); mark(() => -3.5, 200, 440, 9, 3, '#e8e2c8')              // lane dashes
+  mark((d) => hwAt(d) - 0.4, 3, len - 3, 3.2, 3.2, '#e8e2c8', 0.14); mark((d) => -(hwAt(d) - 0.4), 3, len - 3, 3.2, 3.2, '#e8e2c8', 0.14)   // edge lines
   const la = pts[pts.length - 1], lb = pts[pts.length - 2], ll = Math.hypot(la.x - lb.x, la.z - lb.z) || 1
   const ext = [...pts, { x: la.x + (la.x - lb.x) / ll * 45, z: la.z + (la.z - lb.z) / ll * 45 }]
-  L.rideCorr = { pts: ext, hw: 3.7 }
-  L.walk.corridor(ext, 3.7, 'road')
+  L.rideCorr = { pts: ext, hw: 8.0 }
+  L.walk.corridor(ext, 8.0, 'road')
+  L.walk.bound = { x0: -110, z0: -140, x1: 940, z1: 240 }
+  L.walk.free = true; L.core = [ext]; L.roam = { stray: 62, pits: 10, seed: 17 }
+  L.noPit = { x: 60, z: 15, r: 170 }                // no pits in the neighbourhood
   L.projDist = (x, z) => projDist(pts, x, z)
-  L.surface = () => 'road'
-  const side = (d, off) => { // point offset from road at distance d
+  const side = (d, off) => {
     let acc = 0
-    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z); if (acc + l >= d) { const k = (d - acc) / l, dx = pts[i].x - pts[i - 1].x, dz = pts[i].z - pts[i - 1].z, ll = Math.hypot(dx, dz); const x = pts[i - 1].x + dx * k, z = pts[i - 1].z + dz * k; return { x: x + (-dz / ll) * off, z: z + (dx / ll) * off, yaw: Math.atan2(dx, dz) } } acc += l }
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z); if (acc + l >= d) { const k = (d - acc) / l, dx = pts[i].x - pts[i - 1].x, dz = pts[i].z - pts[i - 1].z, ll2 = Math.hypot(dx, dz); const x = pts[i - 1].x + dx * k, z = pts[i - 1].z + dz * k; return { x: x + (-dz / ll2) * off, z: z + (dx / ll2) * off, yaw: Math.atan2(dx, dz) } } acc += l }
     return { x: 0, z: 0, yaw: 0 }
   }
-  // forest density grows with distance
-  const segs = [[-30, 150, 0.0012], [150, 300, 0.004], [300, 450, 0.012], [450, 600, 0.022], [600, 800, 0.034]]
+  // set a group beside the road, its front (+z) facing the carriageway
+  const put = (obj, d, off) => { const s = side(d, off); obj.position.set(s.x, 0, s.z); obj.rotation.y = s.yaw + (off > 0 ? Math.PI / 2 : -Math.PI / 2); L.add(obj); return s }
+  const world = (obj, lx, ly, lz) => { obj.updateMatrixWorld(true); return obj.localToWorld(new THREE.Vector3(lx, ly, lz)) }
+
+  // ---- our house and lane at the start (populateHome also places the scooter, chacha, props and spawn) ----
+  const house = populateHome(G, L, false, { inRoad: true })
+  // forest density grows with distance (the first stretch is town)
+  const segs = [[150, 300, 0.004], [300, 450, 0.012], [450, 600, 0.022], [600, 880, 0.034]]
   for (const [a, b, d] of segs) {
-    const A = side(Math.max(0, a), 0), B = side(Math.min(len, b), 0)
-    L.add(scatterForest(G, { bounds: [Math.min(A.x, B.x) - 70, Math.min(A.z, B.z) - 5, Math.max(A.x, B.x) + 70, Math.max(A.z, B.z) + 5], trails: [{ pts, hw: 5.2 }], density: d, seed: Math.floor(a) + 5 }))
+    const A = side(a, 0), B = side(Math.min(len, b), 0)
+    L.add(scatterForest(G, { bounds: [Math.min(A.x, B.x) - 70, Math.min(A.z, B.z) - 70, Math.max(A.x, B.x) + 70, Math.max(A.z, B.z) + 70], trails: [{ pts, hw: 7.4 }], density: d * 0.5, seed: Math.floor(a) + 5, walk: L.walk, allTrees: true, avoid: [{ x: 60, z: 15, r: 110 }] }))
   }
-  // town edge: a few houses + shops, thinning out
-  const house = (d, off, rot, col, roof = 'tile') => { const s = side(d, off); buildHouse(L, { x: s.x, z: s.z, w: 6 + R.next() * 3, d: 5, h: 3, rot: s.yaw + (off < 0 ? Math.PI / 2 : -Math.PI / 2), col, roof, interior: false, wall: R.next() < 0.3 ? 'brick' : 'plaster', windows: [{ side: 's', x: 0, y: 1.3, w: 1, h: 1, lit: R.next() < 0.5 }] }) }
-  house(14, 11, 0, '#e3c9a0'); house(30, -10, 0, '#c8d6c0', 'flat'); house(52, 12, 0, '#d9b79a'); house(80, -11, 0, '#d4c8e0', 'flat'); house(105, 12, 0, '#e8d6a8'); house(150, -12, 0, '#cfc2a0'); house(190, 13, 0, '#b8c8b0', 'thatch')
-  const stall = teaStall(); const s1 = side(125, 6.5); stall.position.set(s1.x, 0, s1.z); stall.rotation.y = s1.yaw + Math.PI / 2; L.add(stall)
-  const ck = new THREE.Group(); // roadside shops row
-  const sb = signboard('जंगल क्षेत्र · वन विभाग\nTiger / Leopard Zone', '#1f5a34', '#f2f0e0', 3, 1.2); const s2 = side(380, 5.2); sb.position.set(s2.x, 0, s2.z); sb.rotation.y = s2.yaw + Math.PI + 0.1; L.add(sb)
-  const sb2 = signboard('Next Petrol Pump 42 km', '#1c3a6a', '#f4f0e0', 2.6, 1.0); const s3 = side(250, -5.2); sb2.position.set(s3.x, 0, s3.z); sb2.rotation.y = s3.yaw + 0.05; L.add(sb2)
-  for (let d = 10; d < 330; d += 24) { const s = side(d, -5.6); pole(L, s.x, s.z, 8) }
-  for (let d = 10; d < 306; d += 24) { const a = side(d, -5.6), b = side(d + 24, -5.6); wires(L, { x: a.x, y: 7.6, z: a.z }, { x: b.x, y: 7.6, z: b.z }, 0.8) }
-  for (let d = 20; d < 170; d += 60) { const s = side(d, 6.2); streetLight(L, s.x, s.z, false) }
-  for (let i = 0; i < 9; i++) { const s = side(R.range(150, 330), R.range(8, 20) * (R.next() < 0.5 ? 1 : -1)); const p = makePalm(R.range(7, 10)); p.position.set(s.x, 0, s.z); L.add(p) }
-  // the scooter
-  const st = side(0, 0)
-  G.addScooter(L, st.x, st.z, 0)
-  L.spawn = { x: 0, z: -2, yaw: 0 }
-  // dusk drift, a truck passing once
+  const sb = signboard('जंगल क्षेत्र · वन विभाग\nTiger / Leopard Zone', '#1f5a34', '#f2f0e0', 3, 1.2); put(sb, 560, 7.2)
+  const sb2 = signboard('Petrol Pump 1 km →', '#1c3a6a', '#f4f0e0', 2.6, 1.0); put(sb2, 245, -9.8)
+  for (let d = 170; d < 450; d += 24) { const s = side(d, -9.6); pole(L, s.x, s.z, 8) }
+  for (let d = 170; d < 426; d += 24) { const a = side(d, -9.6), b = side(d + 24, -9.6); wires(L, { x: a.x, y: 7.6, z: a.z }, { x: b.x, y: 7.6, z: b.z }, 0.8) }
+  for (let i = 0; i < 9; i++) { const s = side(R.range(170, 420), R.range(14, 26) * (R.next() < 0.5 ? 1 : -1)); const p = makePalm(R.range(7, 10)); p.position.set(s.x, 0, s.z); L.add(p) }
+
+
+  // ---- the city stretch (d 190-440): multi-storey blocks with shopfronts, awnings, signs and parked bikes ----
+  const facades = new Map()
+  const facadeTex = (color, floors, cols) => {
+    const key = color + floors + cols; if (facades.has(key)) return facades.get(key)
+    const cv = document.createElement('canvas'); cv.width = cols * 48; cv.height = floors * 56 + 8; const g2 = cv.getContext('2d')
+    g2.fillStyle = color; g2.fillRect(0, 0, cv.width, cv.height)
+    for (let f = 0; f < floors; f++) for (let c2 = 0; c2 < cols; c2++) { g2.fillStyle = f === 0 ? '#1c1a18' : (Math.random() < 0.35 ? '#e8c47a' : '#26323a'); g2.fillRect(c2 * 48 + 9, cv.height - (f + 1) * 56 + 8, 30, f === 0 ? 40 : 34); g2.fillStyle = 'rgba(0,0,0,.25)'; g2.fillRect(c2 * 48 + 7, cv.height - (f + 1) * 56 + 6, 34, 3) }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; facades.set(key, t); return t
+  }
+  const SHOPS = ['MEDICAL STORE', 'KIRANA STORE', 'SWEETS & NAMKEEN', 'MOBILE REPAIR', 'LADIES SALON', 'HARDWARE', 'BOOK DEPOT', 'ROYAL TAILORS', 'ELECTRONICS', 'FRESH BAKERY', 'CYCLE MART', 'CHAI & SNACKS', 'JEWELLERS', 'CLINIC 24x7']
+  const cityBlock = (w, floors, color, name, signBg) => {
+    const g = new THREE.Group(), h = floors * 3.3 + 0.6, dd = 7
+    const sd = new THREE.MeshStandardMaterial({ color, roughness: 0.95 }), fr = new THREE.MeshStandardMaterial({ map: facadeTex(color, floors, Math.max(2, Math.round(w / 2.4))), roughness: 0.9 })
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), [sd, sd, sd, sd, fr, sd]); body.position.y = h / 2; body.castShadow = true; g.add(body)
+    const aw = new THREE.Mesh(new THREE.BoxGeometry(w * 0.92, 0.08, 1.5), new THREE.MeshStandardMaterial({ color: signBg, roughness: 0.9 })); aw.position.set(0, 2.9, dd / 2 + 0.7); aw.rotation.x = 0.28; g.add(aw)
+    const sg = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(w * 0.85, 7), 0.95), new THREE.MeshBasicMaterial({ map: tex.sign(name, signBg, '#f6efd8', 512, 128, '700 54px Inter, sans-serif') })); sg.position.set(0, 3.6, dd / 2 + 0.06); g.add(sg)
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 1.1, 10), new THREE.MeshStandardMaterial({ color: '#2a3a52', roughness: 0.7 })); tank.position.set(w * 0.25, h + 0.55, 0); g.add(tank)
+    return g
+  }
+  const shopCols = ['#d8c8a8', '#c4b49a', '#b8a890', '#d4bca0', '#bcc4b0', '#c8b0a4', '#e0d2b0'], signCols = ['#a33a1a', '#1d5a3a', '#1c3a6a', '#7a2a5a', '#6a4a1a', '#2a5a7a', '#8a2a2a']
+  for (let d = 196, i = 0; d < 440; d += 19 + R.range(0, 6), i++) {
+    for (const sgn of [1, -1]) {
+      if (sgn > 0 && d > 252 && d < 290) continue          // petrol pump
+      if (sgn < 0 && d > 365 && d < 400) continue          // tyre shop
+      const w = 7 + R.range(0, 5), fl = 1 + Math.floor(R.range(0, 3.99)), blk = cityBlock(w, fl, shopCols[(i + (sgn > 0 ? 0 : 3)) % shopCols.length], SHOPS[(i * 2 + (sgn > 0 ? 0 : 1)) % SHOPS.length], signCols[(i + (sgn > 0 ? 1 : 4)) % signCols.length])
+      put(blk, d, sgn * (hwAt(d) + 1.4 + 3.7))
+      const bb = new THREE.Box3().setFromObject(blk); L.walk.box(bb.min.x, bb.min.z, bb.max.x, bb.max.z)
+      if (R.next() < 0.55) { const bk = motorbike(['#a31d1d', '#1d3f7a', '#2a2a2e'][i % 3]); const q = side(d + R.range(-2, 2), sgn * (hwAt(d) + 1.0)); bk.position.set(q.x, 0, q.z); bk.rotation.y = q.yaw + sgn * Math.PI / 2; L.add(bk); L.walk.circle(q.x, q.z, 0.6) }
+    }
+  }
+
+  // ---- POI: the traffic jam (a stuck truck, a constable whistling at nobody, a vegetable cart, school kids) ----
+  { const t = truck(); const ls = []; t.traverse(o => { if (o.isLight) ls.push(o) }); ls.forEach(l => l.parent.remove(l)); const s = side(215, 2.2); t.position.set(s.x, 0, s.z); t.rotation.y = s.yaw + Math.PI; L.add(t); L.walk.circle(s.x, s.z, 1.6); L.walk.circle(s.x - Math.sin(s.yaw) * 3, s.z - Math.cos(s.yaw) * 3, 1.6)
+    const c = G.addActor('father'); const sc = side(224, -0.3); c.place(sc.x, sc.z, s.yaw + Math.PI); c.sfx = false; c.pose('point'); L.refs.jam = new THREE.Vector3(s.x, 1.2, s.z)
+    for (let i = 0; i < 2; i++) { const k = G.addActor('kid'); const q = side(205 + i * 2, 5.6); k.place(q.x, q.z, q.yaw); k.sfx = false; k.face(q.yaw - Math.PI / 2) }
+    const vc = new THREE.Group(); bx(vc, 1.7, 0.1, 0.9, M('#6a4a2a'), 0, 0.7, 0); for (const sg of [-1, 1]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.04, 6, 14), M('#1a1a1a')); w.position.set(0, 0.36, sg * 0.5); w.rotation.y = Math.PI / 2; vc.add(w) } for (let i = 0; i < 7; i++) sph(vc, 0.16, M(['#c83', '#6a4', '#b33'][i % 3]), -0.6 + i * 0.2, 0.9, 0); put(vc, 195, 5.6); L.walk.circle(vc.position.x, vc.position.z, 1.1) }
+
+  // ---- POI: petrol pump (d = 270, right side) ----
+  { const g = new THREE.Group(), red = M('#b3261e'), white = M('#e8e6dc')
+    bx(g, 8, 0.3, 5, white, 0, 4.2, 0); for (const [x, z] of [[-3.6, -2.2], [3.6, -2.2], [-3.6, 2.2], [3.6, 2.2]]) cyl(g, 0.12, 0.12, 4.3, M('#9a9890'), x, 0, z, 8)
+    bx(g, 8, 0.1, 5, red, 0, 4.0, 0)
+    bx(g, 5, 0.18, 1.1, M('#8a877e'), 0, 0, 0)
+    for (const x of [-1.6, 1.6]) { bx(g, 0.8, 1.7, 0.6, red, x, 0.18, 0); bx(g, 0.6, 0.5, 0.05, M('#111c26'), x, 1.1, 0.32); cyl(g, 0.03, 0.03, 0.9, M('#222'), x + 0.45, 0.4, 0.2, 6) }
+    const board = signboard('PETROL PUMP\nOPEN 24 HOURS', '#b3261e', '#f4f0e0', 3.2, 1.2); board.position.set(0, 0, 3.4); g.add(board)
+    const s = put(g, 270, 12); L.refs.pump = world(g, 0, 0.9, 1.9); for (const [x, z] of [[-3.6, -2.2], [3.6, -2.2], [-3.6, 2.2], [3.6, 2.2]]) { const w = world(g, x, 0, z); L.walk.circle(w.x, w.z, 0.2) }
+    const at = G.addActor('chaiwala'); const w = world(g, 0, 0, 1.4); at.place(w.x, w.z, g.rotation.y + Math.PI); at.sfx = false; L.refs.pumpMan = at }
+
+  // ---- POI: puncture / tyre shop (d = 380, left side) ----
+  { const g = new THREE.Group()
+    bx(g, 5.2, 2.6, 0.2, M('#8a7a62'), 0, 0, -1.6); bx(g, 0.2, 2.6, 3.2, M('#8a7a62'), -2.6, 0, 0); bx(g, 0.2, 2.6, 3.2, M('#8a7a62'), 2.6, 0, 0)
+    const roof = bx(g, 5.8, 0.1, 3.8, new THREE.MeshStandardMaterial({ map: tex.tin(), roughness: 0.8, metalness: 0.4 }), 0, 2.6, 0); roof.rotation.x = 0.08
+    for (let i = 0; i < 6; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.12, 8, 14), M('#111')); t.rotation.x = Math.PI / 2; t.position.set(-1.8, 0.14 + i * 0.26, -0.8); g.add(t) }
+    for (let i = 0; i < 3; i++) { const t = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.12, 8, 14), M('#151515')); t.position.set(1.0 + i * 0.5, 0.4, 0.5 + i * 0.2); t.rotation.y = i; g.add(t) }
+    bx(g, 0.9, 0.7, 0.6, M('#3a5a8a'), 1.8, 0, -1.0)    // air compressor
+    const board = signboard('PUNCTURE · TYRE REPAIR\nAIR FREE', '#d8b020', '#1a1a1a', 3, 1.0); board.position.set(0, 0, 2.5); g.add(board)
+    put(g, 380, -12); L.refs.tyre = world(g, 0, 0.8, 1.3)
+    const o = G.addActor('farmer'); const w = world(g, 0.6, 0, -0.6); o.place(w.x, w.z, g.rotation.y); o.sfx = false; o.pose('sit'); L.refs.tyreMan = o }
+
+  // ---- POI: roadside temple with a bell (d = 480, right side) ----
+  { const g = new THREE.Group()
+    bx(g, 4, 0.4, 4, M('#b8b2a2'), 0, 0, 0); bx(g, 1.8, 1.9, 1.5, M('#e8dcc0'), 0, 0.4, -0.6)
+    const dome = new THREE.Mesh(new THREE.ConeGeometry(1.2, 1.3, 8), M('#d98a2a')); dome.position.set(0, 3.2, -0.6); g.add(dome)
+    const flag = cyl(g, 0.03, 0.03, 2.2, M('#4a3a2a'), 0.9, 2.3, -0.6, 6); const fl = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), M('#c8321e', { side: THREE.DoubleSide })); fl.position.set(1.25, 4.3, -0.6); g.add(fl)
+    // bell tied in red cloth
+    const bell = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.34, 10), M('#b8942a', { metalness: 0.7, roughness: 0.4 })); bell.position.set(0, 2.0, 0.6); g.add(bell); bx(g, 0.5, 0.06, 0.06, M('#4a3a2a'), 0, 2.32, 0.6)
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.5), M('#c8321e', { side: THREE.DoubleSide })); cloth.position.set(0, 1.7, 0.6); g.add(cloth)
+    for (let i = 0; i < 3; i++) sph(g, 0.12, M('#e6a020'), -0.5 + i * 0.5, 0.78, 0.2, 1, 0.6, 1)   // marigolds
+    put(g, 480, 11); L.refs.temple = world(g, 0, 1.2, 1.4); L.walk.circle(world(g, 0, 0, -0.6).x, world(g, 0, 0, -0.6).z, 1.4) }
+
+  // ---- POI: the dhaba (d = 580, left side): blue tarpaulin, a fan on a pole, tables, charpais, a transistor radio ----
+  { const g = new THREE.Group()
+    bx(g, 10, 0.1, 6.6, M('#2a5aa8', { roughness: 0.7 }), 0, 3.0, 0)
+    for (const [x, z] of [[-4.7, -3.0], [4.7, -3.0], [-4.7, 3.0], [4.7, 3.0]]) cyl(g, 0.07, 0.07, 3.0, M('#6a5a44'), x, 0, z, 8)
+    fan(L, g, 0, 2.9, 0)
+    bx(g, 5, 1.0, 0.7, M('#6a4a2a'), 0, 0, -2.6)                // the counter
+    bx(g, 0.3, 0.2, 0.15, M('#222'), -1.8, 1.0, -2.6)          // transistor radio
+    for (const [x, z] of [[-3, 0.4], [0.2, 0.9], [3.2, 0.2]]) { const t = table(1.3, 0.8, 0.75); t.position.set(x, 0, z); g.add(t); const c1 = charpai(); c1.scale.setScalar(0.62); c1.rotation.y = Math.PI / 2; c1.position.set(x - 0.95, 0, z); g.add(c1) }
+    const board = signboard('DHABA\nParatha · Lassi · Chai', '#a33a1a', '#f6edd0', 3.4, 1.2); board.position.set(0, 0, 4.2); g.add(board)
+    put(g, 580, -13); L.refs.dhabaTable = world(g, 0.2, 0.8, 0.9); L.refs.dhaba = world(g, 0, 0, 2.6); L.refs.dhabaPark = world(g, 0, 0, 6.5)
+    const o = G.addActor('chaiwala'); const w = world(g, 0, 0, -2.0); o.place(w.x, w.z, g.rotation.y); o.sfx = false; L.refs.dhabaMan = o }
+
+  // ---- the forest edge: the mossy board (d = len - 75) ----
+  { const sg = signboard('JUNGLE RESERVE\nENTRY ALLOWED TILL 5:00 PM', '#3a5a34', '#f2f0e0', 3.2, 1.3); const s = put(sg, len - 75, 7.0); sg.rotation.z = 0.04; L.refs.edge = new THREE.Vector3(s.x, 1.2, s.z) }
+
+  makeTraffic(L, G, ext, { count: 14, lanesAt: (d) => hwAt(Math.max(0, d)) > 5.2 ? [1.8, 5.3] : [1.8], obstacles: [{ d: 215, lat: 2.2, len: 7.5 }] })
+  placePits(L, G)
+  // surfaces + sound
+  L.surface = (x, z) => { if (house.inside(x, z)) return 'tile'; const n = nearestOnPoly(pts, x, z); return n.d < hwAt(cum[Math.min(pts.length - 1, Math.floor(n.t))]) + 0.4 ? 'road' : (Math.hypot(x - 20, z - 6) < 30 ? 'dirt' : 'grass') }
+  L.isIndoors = (x, z) => (house.inside(x, z) ? 1 : 0)
   let passed = false
   L.updaters.push(() => {
-    const sc = G.scooter, pr = projDist(pts, sc.chassis.position.x, sc.chassis.position.z) / len
-    G.env.set(pr > 0.8 ? 'dusk' : 'evening')
-    if (!passed && pr > 0.16) { passed = true; const a = side(120, -1.4), b = side(10, -1.4); audio_pass(G, a, b) }
+    const sc = G.scooter, pl = sc && G.player.mode === 'ride' ? sc.chassis.position : G.player.pos
+    G.env.set('day')
+    const pr = projDist(pts, pl.x, pl.z) / len
+    if (!passed && pr > 0.16) { passed = true; const a = side(120, -1.4), b = side(10, -1.4); G.audio.passBy({ x: a.x, y: 1, z: a.z }, { x: b.x, y: 1, z: b.z }, 5, 'truck') }
   })
-  L.ambient = (S) => { const pr = projDist(pts, G.player.pos.x, G.player.pos.z) / len; S.traffic = Math.max(0, 0.5 - pr * 1.2); S.birds = pr < 0.7 ? 0.6 : 0.2; S.insects = pr > 0.55 ? 0.8 : 0.1 }
+  L.ambient = (S, p) => { const ins = house.inside(p.pos.x, p.pos.z), pr = projDist(pts, p.pos.x, p.pos.z) / len; S.fan = ins ? 0.8 : 0; S.room = ins ? 0.6 : 0.1; S.traffic = ins ? 0.25 : Math.max(0.15, 0.55 - pr * 0.9); S.birds = pr < 0.7 ? 0.6 : 0.25; S.insects = pr > 0.6 ? 0.7 : 0.1 }
   return L
 }
-function audio_pass(G, a, b) { G.audio.passBy({ x: a.x, y: 1, z: a.z }, { x: b.x, y: 1, z: b.z }, 5, 'truck') }

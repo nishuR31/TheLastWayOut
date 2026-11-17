@@ -8,7 +8,7 @@ export function build(G, opts = {}) {
   G.env.set('deep', true)
   const pts = [[0, -10], [0, 30], [10, 70], [-2, 115], [-12, 160], [-4, 205], [8, 250], [2, 290], [0, 320]]
   const road = [[-80, 345], [-30, 345], [0, 345], [60, 349], [120, 349]]
-  const L = forestLevel(G, { name: 'exit', trails: [{ pts, hw: 1.3, name: 'path' }, { pts: road, hw: 3.4, name: 'road', tex: 'road', rep: 6, surface: 'road', y: 0.02 }], bounds: [-80, -30, 110, 330], density: 0.045, seed: 123, groundSize: [320, 460, 20, 170], avoid: [{ x: 0, z: -10, r: 4 }, { x: 0, z: 340, r: 14 }], groundColor: 0xa0a898 })
+  const L = forestLevel(G, { name: 'exit', walkBound: [-95, -30, 130, 385], trails: [{ pts, hw: 1.3, name: 'path' }, { pts: road, hw: 3.4, name: 'road', tex: 'road', rep: 6, surface: 'road', y: 0.02 }], bounds: [-80, -30, 110, 330], density: 0.045, seed: 123, groundSize: [320, 460, 20, 170], avoid: [{ x: 0, z: -10, r: 4 }, { x: 0, z: 340, r: 14 }], groundColor: 0xa0a898 })
   // join: path ends at the road edge (0,320)->(0,345): short mud connector
   const conn = [[0, 318], [0, 332], [0, 345]]; L.ribbon(conn, 1.4, 'mud', 3, 0.014); L.walk.corridor(conn, 1.3, 'conn')
   L.pathPts = L.trails[0].pts; L.roadPts = L.trails[1].pts

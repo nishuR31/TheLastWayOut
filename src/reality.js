@@ -88,7 +88,12 @@ export const REALITY = [
 ]
 export const byId = Object.fromEntries(REALITY.map(r => [r.id, r]))
 const KEY = 'tlwo_reality_v1'
-export function getUnlocked() { try { return JSON.parse(localStorage.getItem(KEY) || '[]') } catch (e) { return [] } }
+export function getUnlocked() {
+  try {
+    const v = JSON.parse(localStorage.getItem(KEY) || '[]')
+    return Array.isArray(v) ? v.filter(x => typeof x === 'string') : []
+  } catch (e) { return [] }
+}
 export function unlock(id) {
   if (!byId[id]) return false
   const u = getUnlocked(); if (u.includes(id)) return false

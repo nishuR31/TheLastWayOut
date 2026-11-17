@@ -2,7 +2,7 @@
 import { nearestOnPoly } from '../core/util.js'
 
 export class Walk {
-  constructor() { this.corr = []; this.discs = []; this.rects = []; this.circles = []; this.boxes = [] }
+  constructor() { this.corr = []; this.discs = []; this.rects = []; this.circles = []; this.boxes = []; this.free = false; this.bound = null; this.lastClamp = false }
   corridor(pts, hw, name = '') { pts = pts.map(p => (Array.isArray(p) ? { x: p[0], z: p[1] } : p)); const c = { pts, hw, name, off: false }; this.corr.push(c); return c }
   set(name, on) { for (const c of this.corr) if (c.name === name) c.off = !on; for (const c of this.discs) if (c.name === name) c.off = !on; for (const c of this.rects) if (c.name === name) c.off = !on }
   disc(x, z, r, name = '') { const d = { x, z, r, name, off: false }; this.discs.push(d); return d }
@@ -11,6 +11,7 @@ export class Walk {
   box(x0, z0, x1, z1) { const b = { x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1) }; this.boxes.push(b); return b }
   // signed distance to the walkable union (negative = inside), plus the nearest allowed point
   query(x, z, rad = 0) {
+    if (this.free) return { d: -1, x, z }
     let best = 1e9, bx = x, bz = z
     for (const c of this.corr) {
       if (c.off) continue
@@ -33,6 +34,8 @@ export class Walk {
   }
   dist(x, z) { return this.query(x, z, 0).d }
   resolve(p, rad = 0.35) {
+    this.lastClamp = false
+    if (this.bound) { const b = this.bound; if (p.x < b.x0 + rad) { p.x = b.x0 + rad; this.lastClamp = true } if (p.x > b.x1 - rad) { p.x = b.x1 - rad; this.lastClamp = true } if (p.z < b.z0 + rad) { p.z = b.z0 + rad; this.lastClamp = true } if (p.z > b.z1 - rad) { p.z = b.z1 - rad; this.lastClamp = true } }
     const q = this.query(p.x, p.z, rad)
     if (q.d > 0) { p.x = q.x; p.z = q.z }
     for (let it = 0; it < 2; it++) {

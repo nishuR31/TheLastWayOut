@@ -45,10 +45,12 @@ export function forestLevel(G, o) {
     if (!t.noRibbon) t.mesh = L.ribbon(t.pts, t.hw * 0.95, t.tex || 'mud', t.rep || 3, t.y || 0.012, t.color || 0xffffff)
     if (!t.noWalk) L.walk.corridor(t.pts, t.hw, t.name || 'trail')
   }
-  if (o.bounds) L.add(scatterForest(G, { bounds: o.bounds, trails: o.trails, density: o.density || 0.05, seed: o.seed || 3, avoid: o.avoid || [], walk: L.walk, tint: o.tint }))
+  if (o.bounds) L.add(scatterForest(G, { bounds: o.bounds, trails: o.trails, density: o.density || 0.05, seed: o.seed || 3, avoid: o.avoid || [], walk: L.walk, tint: o.tint, allTrees: o.freeRoam !== false }))
   const trails = o.trails
   L.surface = (x, z) => { for (const t of trails) if (nearestOnPoly(t.pts, x, z).d < t.hw) return t.surface || 'mud'; return 'grass' }
   L.trails = trails
+  { const wb = o.walkBound || o.bounds; if (wb) L.walk.bound = { x0: wb[0] + 2, z0: wb[1] + 2, x1: wb[2] - 2, z1: wb[3] - 2 } }
+  if (o.freeRoam !== false) { const fr = o.freeRoam || {}; L.walk.free = true; L.core = trails.map(t => t.pts); L.roam = { stray: fr.stray || 48, pits: fr.pits ?? 8, seed: o.seed || 3 } }
   return L
 }
 export const V3 = (x, y, z) => new THREE.Vector3(x, y, z)

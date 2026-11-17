@@ -27,6 +27,8 @@
   <div id="compass"><canvas id="compass-c" width="720" height="48"></canvas><div id="compass-t"></div></div>
   <div id="minimap-w"><canvas id="minimap" width="340" height="340"></canvas><div id="minimap-hint"><kbd>M</kbd> map · <kbd>H</kbd> madad</div></div>
   <div id="wp"><i></i><b id="wp-d"></b></div>
+  <div id="twigs"></div>
+  <div id="phone"></div>
   <div id="speedo" class="hidden"><b id="speedo-v">0</b><small>km/h</small></div>
 </div>
 
@@ -51,19 +53,19 @@
     <h2>आख़िरी रास्ता</h2>
     <div class="menu-sub">Nishan &amp; Nishant went out for a ride. Most of what happened that night has an explanation.<br/>Not all of it.</div>
     <div class="menu-btns">
-      <button id="m-start" class="primary">▶ &nbsp;New Game</button>
-      <button id="m-chapters">Chapters</button>
-      <button id="m-log">Reality Log <span id="m-log-n"></span></button>
-      <button id="m-settings">Settings</button>
-      <button id="m-controls">Controls</button>
-      <button id="m-quit" class="hidden">Quit</button>
+      <button id="m-start" class="primary"><span>▶ &nbsp;New Game</span><kbd>N</kbd></button>
+      <button id="m-chapters"><span>Chapters</span><kbd>C</kbd></button>
+      <button id="m-log"><span>Reality Log <small id="m-log-n"></small></span><kbd>R</kbd></button>
+      <button id="m-settings"><span>Settings</span><kbd>S</kbd></button>
+      <button id="m-controls"><span>Keys &amp; Controls</span><kbd>K</kbd></button>
+      <button id="m-quit" class="hidden"><span>Quit</span><kbd>Q</kbd></button>
     </div>
-    <div class="menu-foot">Best with headphones &amp; lights off. Click once to enable sound.</div>
+    <div class="menu-foot">Best with headphones &amp; lights off · Press the highlighted letter or click · <kbd>I</kbd> inventory in game</div>
   </div>
 </div>
 
 <div id="chapters" class="screen hidden"><div class="panel">
-  <h3>Chapters</h3><div id="chapter-list"></div><button class="back">← Back</button>
+  <h3>Chapters</h3><div id="chapter-list"></div><button class="back"><span>← Back</span><kbd>B</kbd></button>
 </div></div>
 
 <div id="settings" class="screen hidden"><div class="panel">
@@ -86,7 +88,7 @@
     <select id="s-nav"><option value="full">Minimap + compass + waypoint</option><option value="compass">Compass + waypoint only</option><option value="off">Off (objective text only)</option></select></label>
   <label>Reduce camera shake <input type="checkbox" id="s-shake"></label>
   <label>Reduce flashing <input type="checkbox" id="s-flash"></label>
-  <button class="back">← Back</button>
+  <button class="back"><span>← Back</span><kbd>B</kbd></button>
 </div></div>
 
 <div id="controls" class="screen hidden"><div class="panel">
@@ -94,25 +96,44 @@
   <table class="keys">
     <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>Walk (on the scooter: throttle / steer / brake)</td></tr>
     <tr><td>Mouse</td><td>Look around</td></tr>
-    <tr><td><kbd>Shift</kbd></td><td>Run (you will get tired)</td></tr>
-    <tr><td><kbd>F</kbd></td><td>Torch on / off</td></tr>
-    <tr><td><kbd>E</kbd></td><td>Interact · hold near the scooter to push it</td></tr>
-    <tr><td><kbd>C</kbd></td><td>Crouch / hide</td></tr>
-    <tr><td><kbd>P</kbd></td><td>Check phone</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>W</kbd></td><td>Run (you will get tired). While pushing the scooter: your friend joins in; two people push about twice as fast as one</td></tr>
+    <tr><td><kbd>Shift</kbd></td><td>Crouch / hide (hold, without W)</td></tr>
+    <tr><td><kbd>C</kbd></td><td>Switch first-person / third-person camera</td></tr>
+    <tr><td><kbd>F</kbd></td><td>Flashlight on / off. While you push the scooter it switches the bike's headlight instead of the phone</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Interact · at any table: leave / pick up your phone and key</td></tr>
+    <tr><td><kbd>E</kbd></td><td>Pick up twigs · at a fire-pit: light it (2 twigs) or feed it</td></tr>
+    <tr><td><kbd>T</kbd></td><td>Build a fire where you stand (3 twigs). Warmth eases tiredness and fear</td></tr>
+    <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>Push the scooter by hand (rough ground) · <kbd>B</kbd> to ride it</td></tr>
+    <tr><td><kbd>B</kbd></td><td>Scooter: get on and start it (needs the key) · switch off and get off</td></tr>
+    <tr><td><kbd>I</kbd></td><td>Inventory: phone, key, helmets, twigs, matches, plug, petrol... (also in the pause menu)</td></tr>
+    <tr><td><kbd>P</kbd></td><td>Phone on / off (bottom-right: time, network, flashlight, settings, menu)</td></tr>
     <tr><td><kbd>M</kbd></td><td>Open the map (shows where you are, which way you face, and where to go)</td></tr>
     <tr><td><kbd>H</kbd></td><td>Stuck? Hops you a few metres ahead along the route</td></tr>
-    <tr><td><kbd>Esc</kbd></td><td>Pause</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Pause. In menus: press the highlighted letter (N New game, S Settings, M Main menu...), B to go back</td></tr>
   </table>
   <p class="dim">No fighting. No inventory. Just two friends, and a night. The gold marker always shows where to go next.</p>
-  <button class="back">← Back</button>
+  <button class="back"><span>← Back</span><kbd>B</kbd></button>
 </div></div>
 
-<div id="pause" class="screen hidden"><div class="panel center">
+<div id="pause" class="screen hidden"><div class="panel center pause-panel">
   <h3>Paused</h3>
-  <button id="p-resume" class="primary">Resume</button>
-  <button id="p-settings">Settings</button>
-  <button id="p-controls">Controls</button>
-  <button id="p-menu">Main menu</button>
+  <div id="pause-info" class="pause-info"></div>
+  <div class="menu-btns">
+    <button id="p-resume" class="primary"><span>Resume</span><kbd>R</kbd></button>
+    <button id="p-inv"><span>Inventory · Saaman</span><kbd>I</kbd></button>
+    <button id="p-settings"><span>Settings</span><kbd>S</kbd></button>
+    <button id="p-controls"><span>Keys &amp; Controls</span><kbd>C</kbd></button>
+    <button id="p-menu"><span>Main menu</span><kbd>M</kbd></button>
+    <button id="p-quit" class="hidden"><span>Quit game</span><kbd>Q</kbd></button>
+  </div>
+  <p class="dim">Esc — resume</p>
+</div></div>
+
+<div id="inventory" class="screen hidden"><div class="panel wide inv-panel">
+  <h3>Inventory · Saaman</h3>
+  <div id="inv-grid"></div>
+  <p id="inv-tip" class="dim"></p>
+  <button id="inv-close" class="primary"><span>Close</span><kbd>I</kbd></button>
 </div></div>
 
 <div id="map" class="screen hidden"><div class="panel map-panel">

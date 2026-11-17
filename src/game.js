@@ -11,8 +11,17 @@ import { clamp, damp, lerp, angDiff, fmtClock, R, nearestOnPoly } from './core/u
 import { Scooter } from './world/scooter.js'
 import { preloadPBR } from './world/textures.js'
 import { nav } from './core/nav.js'
+import { phone } from './core/phone.js'
+import { vm } from './world/viewmodel.js'
+import { body } from './world/playerbody.js'
+import { items } from './core/items.js'
+import { fire } from './core/fire.js'
+import { roamUpdate, placePits } from './core/roam.js'
 
 const LEVELS = import.meta.glob('./levels/*.js')
+// reusable scratch objects for the per-frame hot path (no per-frame allocation)
+const _va = new THREE.Vector3(), _vb = new THREE.Vector3(), _vc = new THREE.Vector3()
+const _vq = new THREE.Quaternion(), _ve = new THREE.Euler(), _up = new THREE.Vector3(0, 1, 0)
 
 export const G = {
   cfg: { density: 1, rain: 1, shadows: false, ambBoost: 1, reduceShake: false, reduceFlash: false, engineSign: -1, gfx: 'med' },
@@ -48,6 +57,7 @@ G.init = function (canvas) {
   // player
   G.player = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, eyeH: 1.62, crouch: 0, stamina: 1, bobT: 0, stepT: 0, mode: 'walk', canMove: true, canLook: true, speedMul: 1, vel: 0, roll: 0, lookX: 0, push: false, tired: 0, headDip: 0 }
   G.fear = 0; G.fearT = 0; G.tiredT = 0
+  vm.init(G); body.init(G); fire.init(G)
   addEventListener('resize', G.resize); G.resize()
   G.setGfx(G.cfg.gfx)
 }
@@ -72,7 +82,7 @@ G.abort = function () {
   rej.forEach(x => x.rej('abort')); if (G._choiceRej) G._choiceRej('abort')
   G.interacts.forEach(i => i.rej && i.rej('abort')); G.interacts = []
 }
-G.beginRun = function () { G.stopped = false }
+G.beginRun = function () { G.stopped = false; vm.reset() }
 
 // ---------------- clock ----------------
 G.setClock = function (h, frozen = false, show = true) { G.time = h; G.clockFrozen = frozen; G.clockShow = show; ui.clock(fmtClock(h), frozen, show) }
@@ -80,14 +90,21 @@ G.tickClock = function (dt, rate) { if (G.clockFrozen || !rate) return; G.time +
 
 // ---------------- levels ----------------
 G.loadLevel = async function (name, opts = {}) {
+  vm.reset()
   document.getElementById('loading').classList.remove('hidden')
   await new Promise(r => setTimeout(r, 30))
   await preloadPBR()
   if (G.level) { G.level.dispose(); G.level = null }
   G.actors.forEach(a => a.dispose()); G.actors = []; G.comp = null; G.scooter = null
   // purge any leftover rain/torch state
-  const mod = await LEVELS['./levels/' + name + '.js']()
-  const L = mod.build(G, opts); G.level = L; G.scene.add(L.group)
+  const loader = LEVELS['./levels/' + name + '.js']
+  if (typeof loader !== 'function') {
+    document.getElementById('loading').classList.add('hidden')
+    throw new Error('Unknown level: ' + name)
+  }
+  const mod = await loader()
+  G.pit = null; G.showBody = false; G.bodyPose = null; G.fearBoost = 0; G._wantBoost = 0; G.pitCD = 0
+  const L = mod.build(G, opts); G.level = L; G.scene.add(L.group); if (L.core && L.roam && !L.pits) placePits(L, G); items.scan(G, L); fire.populate(G, L)
   G.interacts = []
   const p = G.player; p.pos.set(L.spawn.x, 0, L.spawn.z); p.yaw = L.spawn.yaw; p.pitch = 0
   G.env.indoors = false; G.env.fogMul = 1
@@ -108,17 +125,38 @@ function companionUpdate(dt) {
   const p = G.player, pf = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) }, pr = { x: -pf.z, z: pf.x }
   const dxp = p.pos.x - c.pos.x, dzp = p.pos.z - c.pos.z, dp = Math.hypot(dxp, dzp)
   c.alertT = Math.max(0, c.alertT - dt)
+  if (G.assistT > 0 && G.scooter && p.push && c.mode === 'follow') {
+    const sc = G.scooter, f = sc.fwd(), cp = sc.chassis.position
+    const tx = cp.x - f.x * 0.45 - f.z * 0.8, tz = cp.z - f.z * 0.45 + f.x * 0.8, d = Math.hypot(tx - c.pos.x, tz - c.pos.z)
+    c.assisting = true; c.pose(d < 0.7 ? 'push' : 'stand'); c.look(null)
+    if (d > 0.2) { c.path = [{ x: tx, z: tz }]; c.walkSpeed = clamp(d * 2.4, 0.6, 2.6) } else { c.path = []; c.face(sc.yaw) }
+    return
+  } else if (c.assisting) { c.assisting = false; c.pose('stand') }
   if (c.mode === 'follow') {
     if (c.alertT > 0) { c.path = []; c.look(c.alertPos); c.face(c.alertPos) }
     else {
-      const sc = G.scooter && p.push
-      const off = sc ? { f: 0.2, r: 1.2 * c.sideSign } : { f: -1.1, r: -1.0 * c.sideSign }
+      // ---- smarter follower: keeps a comfortable distance, matches pace, crouches/hides with you, fidgets when idle,
+      // keeps out of your way, hugs you tighter when scared and never gets left behind ----
+      const pushing = G.scooter && p.push, moving = Math.abs(p.vel) > 0.3, running = p.vel > 2.6, fearK = G.fear > 0.5 ? 0.7 : 1
+      G.stillT = moving ? 0 : (G.stillT || 0) + dt
+      const off = pushing ? { f: 0.2, r: 1.2 * c.sideSign } : moving ? { f: -1.3 * fearK, r: -1.0 * c.sideSign * fearK } : { f: -0.5, r: -1.6 * c.sideSign * fearK }
       const tx = p.pos.x + pf.x * off.f + pr.x * off.r, tz = p.pos.z + pf.z * off.f + pr.z * off.r
       const d = Math.hypot(tx - c.pos.x, tz - c.pos.z)
-      if (d > 0.7) { const sp = clamp(d * 1.6, 0.6, dp > 7 ? 3.6 : 2.5) * (1 - G.player.tired * 0.25); c.path = [{ x: tx, z: tz }]; c.walkSpeed = sp } else { c.path = []; c.face(Math.atan2(pf.x, pf.z) + 0.0) }
+      if (d > 0.8) { const sp = clamp(d * 1.7, 0.6, running || dp > 7 ? 3.6 : 2.5) * (1 - G.player.tired * 0.25); c.path = [{ x: tx, z: tz }]; c.walkSpeed = sp } else { c.path = []; c.face(Math.atan2(pf.x, pf.z)) }
+      // never stand in the player's way
+      if (dp < 0.9 && !pushing) { const sx = c.pos.x - p.pos.x || 0.1, sz = c.pos.z - p.pos.z || 0.1, l = Math.hypot(sx, sz); c.path = [{ x: c.pos.x + sx / l * 1.2, z: c.pos.z + sz / l * 1.2 }]; c.walkSpeed = 1.8 }
+      // copies the player's crouch
+      c.P.crouch += ((p.crouch > 0.5 ? 1 : 0) - c.P.crouch) * Math.min(1, dt * 6)
+      c.P.tremble = G.fear > 0.55 ? (G.fear - 0.5) * 1.2 : 0
+      // idle fidgets (only if the story has not put him in some other pose)
+      if (G.stillT > 6 && !c.fidT && c.P.pose === 'stand' && !moving && c.alertT <= 0 && R.next() < dt * 0.15) { c.fidT = 2.6; c.pose('rub') }
+      if (c.fidT) { c.fidT -= dt; if (c.fidT <= 0 || moving) { c.fidT = 0; if (c.P.pose === 'rub') c.pose('stand') } }
+      // lost him? bring him back from behind, out of sight
+      c.stuckT = (c.stuckT || 0) + (d > 4 && c.speed < 0.15 ? dt : 0); if (d < 3) c.stuckT = 0
+      if (dp > 16 || c.stuckT > 3) { const bx = p.pos.x - pf.x * 5 + pr.x * 1.5, bz = p.pos.z - pf.z * 5 + pr.z * 1.5; const q = { x: bx, z: bz }; if (G.level) G.level.walk.resolve(q, 0.4); c.place(q.x, q.z, p.yaw); c.stuckT = 0 }
       c.idleLookT -= dt
       if (c.idleLookT <= 0) { c.idleLookT = R.range(2.5, 6); c.glance = R.next() < 0.6 ? { x: c.pos.x + R.range(-6, 6), y: 1.5, z: c.pos.z + R.range(-6, 6) } : null }
-      if (dp < 3.5 && G.lookingNow) c.look(G.lookingNow); else if (c.glance && dp < 8) c.look(c.glance); else c.look({ x: p.pos.x + pf.x * 6, y: 1.4, z: p.pos.z + pf.z * 6 })
+      if (dp < 3.5 && G.lookingNow) c.look(G.lookingNow); else if (c.glance && dp < 8 && !running) c.look(c.glance); else c.look({ x: p.pos.x + pf.x * 6, y: 1.4 - p.pitch * 3, z: p.pos.z + pf.z * 6 })
     }
   } else if (c.mode === 'hold' && c.holdPos) {
     const d = Math.hypot(c.holdPos.x - c.pos.x, c.holdPos.z - c.pos.z)
@@ -137,17 +175,43 @@ G.addScooter = function (L, x, z, yaw = 0, color = '#27508f') {
   sc.park(); return sc
 }
 G.mount = function (sc) {
-  const p = G.player; p.mode = 'ride'; G.scooter = sc; sc.parked = false; sc.light(true); audio.st.engine = 1
+  const p = G.player; p.mode = 'ride'; G.scooter = sc; sc.parked = false; sc.light(false); audio.st.engine = 0
+  // the key goes in and turns before the engine catches
+  G.keyBusy = true; vm.keyStart(sc, () => { audio.st.engine = 1; sc.light(true); audio.click() }).then(() => { G.keyBusy = false })
   if (G.comp) { G.comp.attach = sc.pillion; G.comp.pose('pillion'); G.comp.path = [] }
   ui.show('speedo', true)
 }
 G.dismount = function (x, z) {
   const p = G.player, sc = G.scooter; p.mode = 'walk'; audio.st.engine = 0; audio.st.rpm = 0; ui.show('speedo', false)
+  G.keyBusy = false; vm.keyStop(sc, () => { sc.light(false) })
   sc.park(); const f = sc.fwd(); p.pos.set(x ?? sc.chassis.position.x - f.z * 0.9, 0, z ?? sc.chassis.position.z + f.x * 0.9); p.yaw = sc.yaw
   if (G.comp && G.comp.attach) { const c = G.comp; c.attach = null; c.pose('stand'); c.place(sc.chassis.position.x + f.z * 0.9, sc.chassis.position.z - f.x * 0.9, sc.yaw) }
 }
-G.startPush = function () { const p = G.player, sc = G.scooter; if (!sc) return; p.push = true; p.mode = 'walk'; sc.parked = false; if (G.comp) G.comp.sideSign = 1 }
-G.stopPush = function () { const p = G.player, sc = G.scooter; p.push = false; if (sc) sc.park() }
+// B: get on / start the scooter, or switch it off and get off
+G.canBoard = () => !!G.level && !G.noBoard && !(G.scooter && (G.scooter.punctured || G.scooter.dead))
+const nearScooter = (pos) => G.scooter && Math.hypot(pos.x - G.scooter.chassis.position.x, pos.z - G.scooter.chassis.position.z) < 3.6
+G.bikeAction = function () {
+  const p = G.player, sc = G.scooter
+  if (!sc || G.pit || G.keyBusy || G.camOverride) return
+  if (p.push && p.mode !== 'ride' && !input.down('Shift')) { G.stopPush(); G.noRun = false }   // B while pushing: let go and get on
+  if (p.mode === 'ride') { if (Math.abs(sc.speed) > 2.2) { ui.toast('Pehle scooter roko (Space) · Stop first', 2); return } G.dismount(); return }
+  if (G.cur && nearScooter(G.cur.pos)) return       // a story prompt on the scooter handles B itself
+  if (!p.canMove) return
+  if (Math.hypot(sc.chassis.position.x - p.pos.x, sc.chassis.position.z - p.pos.z) > 2.8) { ui.toast('Scooter ke paas jao · Get close to the scooter', 2); return }
+  if (!G.canBoard()) { ui.toast('Abhi scooter nahi chala sakte · Can\'t ride right now', 2); return }
+  if (G.hasKey === false) { ui.toast('Chabi aapke paas nahi hai (ghar ke hook par reh gayi) · You do not have the key', 2.5); return }
+  G.mount(sc)
+}
+// Shift+B: start / stop pushing the scooter by hand (good for rough ground, or when you do not want to ride)
+G.pushToggle = function () {
+  const p = G.player, sc = G.scooter
+  if (!sc || G.pit || G.keyBusy || G.camOverride || p.mode === 'ride' || !p.canMove) return
+  if (p.push) { G.stopPush(); G.noRun = false; ui.toast('Scooter chhod di · Let go of the scooter', 1.6); return }
+  if (Math.hypot(sc.chassis.position.x - p.pos.x, sc.chassis.position.z - p.pos.z) > 2.8) { ui.toast('Scooter ke paas jao · Get close to the scooter', 2); return }
+  G.startPush(); ui.toast('Scooter dhakel rahe ho (Shift+W: dost bhi madad karega) · Pushing', 2.5)
+}
+G.startPush = function () { const p = G.player, sc = G.scooter; if (!sc) return; p.push = true; p.mode = 'walk'; sc.parked = false; if (G.comp) G.comp.sideSign = 1; if (G.torchOn) sc.light(true) }
+G.stopPush = function () { const p = G.player, sc = G.scooter; p.push = false; if (sc) { sc.park(); if (p.mode !== 'ride') sc.light(false) } }
 
 // ---------------- interaction ----------------
 G.interact = function (pos, label, o = {}) {
@@ -163,11 +227,19 @@ G.clearInteracts = function () { G.interacts = [] }
 G.fx = {
   fear(v) { G.fearT = v }, tired(v) { G.tiredT = v }
 }
-G.setTorch = function (on) { G.torchOn = on; audio.click() }
+// the phone torch is only "really" on if the bike headlight is not doing the job (pushing the bike)
+G.torchActive = () => !!G.torchOn && !(G.player.push && G.scooter && G.scooter.lightOn)
+// F: while pushing the scooter this switches the BIKE HEADLIGHT, otherwise the phone flashlight
+G.toggleLight = function () {
+  const p = G.player, sc = G.scooter
+  if (p.push && sc && p.mode !== 'ride') { const on = !sc.lightOn; sc.light(on); audio.click(); ui.toast(on ? 'Scooter ki headlight on · Bike headlight' : 'Headlight off', 1.6); return }
+  G.setTorch(!G.torchOn)
+}
+G.setTorch = function (on) { if (on && G.hasPhone === false) { ui.toast('Phone table par rakha hai · Your phone is on the table', 2.5); return } G.torchOn = on; audio.click() }
 G.lockMove = (m = true) => { G.player.canMove = !m }
 G.teleportPlayer = function (x, z, yaw) { const p = G.player; p.pos.set(x, 0, z); if (yaw !== undefined) p.yaw = yaw }
-G.blink = async function (dur = 0.5) { await ui.fade(1, dur * 0.4); await G.wait(dur * 0.2) }
-G.unblink = async function (dur = 0.8) { await ui.fade(0, dur) }
+G.blink = async function (dur = 0.5) { await ui.fade(1, dur * 0.4, true); await G.wait(dur * 0.2) }
+G.unblink = async function (dur = 0.8) { await ui.fade(0, dur, true) }
 G.distToPlayer = (x, z) => Math.hypot(x - G.player.pos.x, z - G.player.pos.z)
 G.playerLookingAt = function (pos, cos = 0.8) { const p = G.player, d = new THREE.Vector3(pos.x - p.pos.x, 0, pos.z - p.pos.z).normalize(); const f = new THREE.Vector3(Math.sin(p.yaw), 0, Math.cos(p.yaw)); return d.dot(f) > cos }
 G.playerLookingAt3 = function (pos, cos = 0.9) { const d = new THREE.Vector3(pos.x, pos.y ?? 1.5, pos.z).sub(G.camera.position).normalize(); const f = new THREE.Vector3(); G.camera.getWorldDirection(f); return d.dot(f) > cos }
@@ -175,6 +247,26 @@ G.turnTo = async function (pos, dur = 0.9) {
   const p = G.player, tgt = Math.atan2(pos.x - p.pos.x, pos.z - p.pos.z), ty = Math.atan2((pos.y ?? 1.4) - 1.6, Math.hypot(pos.x - p.pos.x, pos.z - p.pos.z))
   const y0 = p.yaw, d = angDiff(y0, tgt), pi0 = p.pitch; let el = 0
   await G.until(() => { el += G.lastDt; const k = Math.min(1, el / dur), e = k * k * (3 - 2 * k); p.yaw = y0 + d * e; p.pitch = lerp(pi0, ty, e); return k >= 1 })
+}
+// A scripted camera move (dolly / crane / pan) for opening shots and key beats. Space / Enter skips it.
+// sh: { from, to, lookFrom, lookTo, dur, fov, fov1 }
+G.shot = async function (sh) {
+  const o = G.camOverride = { pos: sh.from.clone(), look: sh.lookFrom.clone(), fov: sh.fov || 62, snap: true }
+  const fov0 = sh.fov || 62, fov1 = sh.fov1 || fov0; let el = 0
+  await G.until(() => { el += G.lastDt; if (el > 0.8 && (input.hit('Space') || input.hit('Enter'))) el = sh.dur; const k = Math.min(1, el / sh.dur), e = k * k * (3 - 2 * k); o.pos.lerpVectors(sh.from, sh.to, e); o.look.lerpVectors(sh.lookFrom, sh.lookTo, e); o.fov = lerp(fov0, fov1, e); return k >= 1 })
+}
+// hand the camera back to the player, facing where the last shot looked
+G.endShot = function () {
+  const o = G.camOverride, p = G.player; if (!o) return
+  const d = new THREE.Vector3().subVectors(o.look, o.pos)
+  p.yaw = Math.atan2(d.x, d.z); p.pitch = clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -1.2, 1.2)
+  G.camOverride = null
+}
+// horror beat: the player's head is pulled round to a sound / shape, held a moment, then released (never during transitions)
+G.horrorTurn = async function (pos, hold = 1.2, dur = 0.75, shake = 0.25) {
+  const p = G.player; if (p.mode === 'ride' || G.camOverride || G.pit) return
+  const was = p.canMove; p.canMove = false
+  try { await G.turnTo(pos.isVector3 ? pos : new THREE.Vector3(pos.x, pos.y ?? 1.4, pos.z), dur); if (shake) G.camShake(shake); await G.wait(hold) } finally { p.canMove = was }
 }
 G.camShake = (a = 0.5) => { G.shake = Math.max(G.shake, a * (G.cfg.reduceShake ? 0.25 : 1)) }
 
@@ -204,9 +296,10 @@ G.step = function (dt) {
   for (let i = G.untils.length - 1; i >= 0; i--) { const u = G.untils[i]; u.el += dt; let ok = false; try { ok = u.fn() } catch (e) { console.error(e) } if (ok || (u.t && u.el >= u.t)) { G.untils.splice(i, 1); u.res(ok) } }
   // player
   playerUpdate(dt)
+  roamUpdate(G, dt); fire.update(G, dt)
   // physics
   G.world.step(1 / 60, dt, 4)
-  if (G.scooter) { const sc = G.scooter; if (p.mode === 'ride') { const ax = input.axis(); sc.drive(dt, ax.y, ax.x, input.down('Space'), G.rideMax || 11); sc.uprightCheck(dt); rideBound(sc) } else if (p.push) pushScooter(dt); else sc.park(); sc.sync(dt); audio.st.rpm = clamp(Math.abs(sc.speed) / 11, 0, 1); ui.show('speedo', p.mode === 'ride'); if (p.mode === 'ride') document.getElementById('speedo-v').textContent = Math.round(Math.abs(sc.speed) * 3.6) }
+  if (G.scooter) { const sc = G.scooter; if (p.mode === 'ride') { const ax = input.axis(); sc.drive(dt, G.keyBusy ? 0 : ax.y, ax.x, input.down('Space') || !!G.keyBusy, Math.min(G.rideMax || 11, G.surfaceCap(sc.chassis.position))); sc.uprightCheck(dt); rideBound(sc) } else if (p.push) pushScooter(dt); else sc.park(); sc.sync(dt); audio.st.rpm = clamp(Math.abs(sc.speed) / 11, 0, 1); ui.show('speedo', p.mode === 'ride'); if (p.mode === 'ride') document.getElementById('speedo-v').textContent = Math.round(Math.abs(sc.speed) * 3.6) }
   L.update(dt)
   for (const a of G.actors) a.update(dt)
   { // lip-sync: open the mouth of the speaking actor from the clip level
@@ -223,14 +316,22 @@ G.step = function (dt) {
   updateAudioState(dt)
   G.tickClock(dt, G.clockRate || 0)
   // fear / tired smoothing
-  G.fear = damp(G.fear, G.fearT, 1.5, dt); p.tired = damp(p.tired, G.tiredT, 0.5, dt)
+  G.fear = damp(G.fear, Math.min(1, G.fearT * (1 - 0.35 * (G.warm || 0)) + (G.fearBoost || 0)), 1.5, dt); p.tired = damp(p.tired, G.tiredT * (1 - 0.5 * (G.warm || 0)), 0.5, dt)
   ui.fear(Math.max(0, (G.fear - 0.45) * 1.3))
   audio.st.fear = G.fear > 0.35 ? G.fear : 0
   if (G.onUpdate) G.onUpdate(dt)
 }
 
+// how fast the ground lets you go: tarmac is quick, mud and forest floor are slow
+G.surfaceCap = (pos) => { const L = G.level, sf = L && L.surface ? L.surface(pos.x, pos.z) : 'road'; return ({ road: 11, tile: 4, dirt: 7, grass: 6.5, ash: 6, mud: 5 })[sf] || 6 }
 function rideBound(sc) {
   const L = G.level
+  if (L.walk.free) { // free roam: only trees / props are solid
+    const c = sc.chassis, q = { x: c.position.x, z: c.position.z }; L.walk.resolve(q, 0.55)
+    if (L.walk.lastClamp && (!G._bndT || performance.now() - G._bndT > 3500)) { G._bndT = performance.now(); ui.toast('Yahan se aage raasta band hai · The way is blocked', 2.4) }
+    if (Math.abs(q.x - c.position.x) + Math.abs(q.z - c.position.z) > 1e-4) { c.position.x = q.x; c.position.z = q.z; c.velocity.x *= 0.35; c.velocity.z *= 0.35; if (!G._bonkT || performance.now() - G._bonkT > 600) { G._bonkT = performance.now(); audio.thud(null, 0.5); G.camShake(0.3) } }
+    return
+  }
   if (!L.rideCorr) {
     if (L.rideWalk === false) return
     const c = sc.chassis, q = L.walk.query(c.position.x, c.position.z, 0.45)
@@ -246,22 +347,33 @@ function playerUpdate(dt) {
   const lk = input.consumeLook(), s = 0.0022 * input.sens * (input.touch ? 1.1 : 1)
   if (p.mode === 'ride') { p.lookOff = clamp((p.lookOff || 0) - lk.x * s, -1.9, 1.9); p.pitch = clamp(p.pitch - lk.y * s, -0.8, 0.5); if (!lk.x) p.lookOff *= Math.exp(-dt * 0.6) }
   else if (p.canLook && !G.paused) { let dx = -lk.x * s; const LL = G.lookLimit; if (LL) { const rel = angDiff(LL.c, p.yaw); if (Math.abs(rel) > LL.w && Math.sign(dx) === Math.sign(rel)) dx *= 0.12 } p.yaw += dx; p.pitch = clamp(p.pitch - lk.y * s, -1.45, 1.45) }
-  if (input.hit('KeyF')) { G.setTorch(!G.torchOn) }
+  if (input.hit('KeyF')) G.toggleLight()
   if (input.hit('KeyH')) nav.help()
   if (input.hit('F3')) { G._dbg = !G._dbg; document.getElementById('dbg').classList.toggle('hidden', !G._dbg) }
-  if (input.hit('KeyP')) G.checkPhone()
-  if (p.mode === 'ride' || !p.canMove) { if (p.mode !== 'ride') { p.vel = damp(p.vel, 0, 8, dt); p.crouch = damp(p.crouch, input.down('KeyC') && !G.noCrouch ? 1 : 0, 8, dt) } return }
+  if (input.hit('KeyP')) phone.toggle()
+  if (input.hit('KeyC')) G.toggleCam()
+  if (input.hit('KeyT')) fire.build(G)
+  if (input.hit('KeyB')) { if (input.down('Shift')) G.pushToggle(); else G.bikeAction() }
+  if (p.mode === 'ride' || !p.canMove) { if (p.mode !== 'ride') { p.vel = damp(p.vel, 0, 8, dt); p.crouch = damp(p.crouch, input.down('Shift') && !G.noCrouch ? 1 : 0, 8, dt) } return }
   const ax = input.axis(), run = input.down('Shift') || (input.touch && input.down('ShiftLeft'))
   const tiredF = 1 - p.tired * 0.28
   let sp = 1.55 * tiredF
   // stamina with hysteresis: after exhaustion you must regain 30% before sprinting again (no flicker)
   if (p.stamina <= 0.02) p.winded = true; else if (p.stamina > 0.3) p.winded = false
-  if (run && ax.y > 0.3 && (p.push || G.noRun) && !(G._rt > performance.now() - 6000)) { G._rt = performance.now(); ui.toast('Abhi daud nahi sakte · Can\'t run right now', 2) }
+  if (run && ax.y > 0.3 && G.noRun && !p.push && !(G._rt > performance.now() - 6000)) { G._rt = performance.now(); ui.toast('Abhi daud nahi sakte · Can\'t run right now', 2) }
   const canRun = run && !p.winded && !p.push && ax.y > 0.3 && !G.noRun
   if (canRun) { sp = 3.5 * tiredF; p.stamina = Math.max(0, p.stamina - dt * (0.07 + p.tired * 0.05)) } else p.stamina = Math.min(1, p.stamina + dt * (0.22 - p.tired * 0.08) * (ax.x || ax.y ? 0.6 : 1.5))
   { const sb = document.getElementById('stam'); if (sb) { sb.style.opacity = (p.stamina < 0.98 || canRun) ? 0.85 : 0; sb.firstElementChild.style.width = (p.stamina * 100).toFixed(0) + '%'; sb.classList.toggle('winded', !!p.winded) } }
-  if (p.push) sp = 1.25 * tiredF * (G.mudSlow || 1)
-  p.crouch = damp(p.crouch, (input.down('KeyC') || G.forceCrouch) && !p.push && !G.noCrouch ? 1 : 0, 9, dt); sp *= 1 - p.crouch * 0.55
+  // Shift+W while pushing the scooter: the friend joins in and helps push (faster)
+  { const assist = p.push && run && ax.y > 0.3 && !!G.comp && !G.comp.attach; if (assist && !(G.assistT > 0)) ui.toast('Nishant bhi dhakka laga raha hai · Nishant helps push', 2.5); G.assistT = assist ? 0.5 : Math.max(0, (G.assistT || 0) - dt) }
+  if (p.push) {
+    // one person shoves it slowly (and tires); with a friend helping it moves much faster. Mud drags, tarmac is easy.
+    const two = G.assistT > 0 && !!G.comp, ground = clamp(G.surfaceCap(p.pos) / 6.5, 0.6, 1.25)
+    sp = (two ? 1.95 : 0.95) * ground * tiredF * (G.mudSlow || 1)
+    if (!two && (ax.x || ax.y)) p.stamina = Math.max(0, p.stamina - dt * 0.012)
+    G.pushers = two ? 2 : 1
+  } else G.pushers = 0
+  p.crouch = damp(p.crouch, ((run && ax.y <= 0.3) || G.forceCrouch) && !p.push && !G.noCrouch ? 1 : 0, 9, dt); sp *= 1 - p.crouch * 0.55
   sp *= p.speedMul
   const f = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) }, r = { x: -f.z, z: f.x }
   let mx = f.x * ax.y + r.x * ax.x, mz = f.z * ax.y + r.z * ax.x
@@ -269,6 +381,7 @@ function playerUpdate(dt) {
   const tv = Math.hypot(mx, mz) * sp; p.vel = damp(p.vel, tv, 10, dt)
   const nx = p.pos.x + mx * sp * dt, nz = p.pos.z + mz * sp * dt
   const np = { x: nx, z: nz }; L.walk.resolve(np, 0.33)
+  if (L.walk.lastClamp && (!G._bndT || performance.now() - G._bndT > 3500)) { G._bndT = performance.now(); ui.toast('Aage ghana andhera jungle... yahan se aage raasta nahi · Impassable thicket ahead', 2.6) }
   if (G.scooter && p.push) { /* scooter is a collider while pushing */ }
   else if (G.scooter && !p.push) { const c = G.scooter.chassis.position; const dx = np.x - c.x, dz = np.z - c.z, d = Math.hypot(dx, dz); if (d < 1.05) { const k = 1.05 / (d || 1e-3); np.x = c.x + dx * k; np.z = c.z + dz * k } }
   p.pos.x = np.x; p.pos.z = np.z
@@ -309,17 +422,28 @@ function updateInteract(dt) {
     }
   }
   G.cur = best
-  if (best) { ui.prompt(best.label, best.key === 'E' ? 'E' : best.key) } else ui.prompt(p.mode === 'ride' && G.rideHint ? G.rideHint : null, 'E')
-  if (best && input.hit('KeyE')) { audio.click(); if (best.once) G.interacts.splice(G.interacts.indexOf(best), 1); if (best.onUse) best.onUse(); if (best.res) best.res() }
+  let tb = null, fa = null
+  if (!best && p.canMove && p.mode !== 'ride' && !G.pit) { tb = items.near(G); if (tb && !items.label(G, tb)) tb = null }
+  if (!best && !tb && p.canMove && p.mode !== 'ride' && !G.pit) fa = fire.near(G)
+  const board = !best && !tb && !fa && G.scooter && p.canMove && p.mode !== 'ride' && !p.push && !G.pit && G.canBoard() && Math.hypot(G.scooter.chassis.position.x - p.pos.x, G.scooter.chassis.position.z - p.pos.z) < 2.6
+  if (best) { ui.prompt(best.label, best.key === 'E' ? 'E' : best.key) }
+  else if (tb) ui.prompt(items.label(G, tb), 'E')
+  else if (fa) ui.prompt(fire.label(G, fa), 'E')
+  else if (board) ui.prompt(G.hasKey === false ? 'Chabi aapke paas nahi hai' : 'B — scooter par baitho · Shift+B — dhakelo', 'B')
+  else if (G.scooter && p.canMove && p.mode !== 'ride' && p.push && !G.pit) ui.prompt('B — scooter par baitho · Shift+B — chhod do', 'B')
+  else ui.prompt(p.mode === 'ride' ? ((G.rideHint ? G.rideHint + '  ·  ' : '') + 'B — utro / band karo') : null, 'E')
+  if (tb && input.hit('KeyE')) items.use(G, tb)
+  if (fa && input.hit('KeyE')) fire.use(G, fa)
+  if (best && (input.hit('KeyE') || (input.hit('KeyB') && nearScooter(best.pos)))) { audio.click(); if (best.once) G.interacts.splice(G.interacts.indexOf(best), 1); if (best.onUse) best.onUse(); if (best.res) best.res() }
 }
 
-function updateCamera(dt) {
+function updateCameraBase(dt) {
   const p = G.player, cam = G.camera
-  if (G.camOverride) { const o = G.camOverride; cam.position.lerp(o.pos, Math.min(1, dt * 4)); cam.lookAt(o.look); cam.fov = lerp(cam.fov, o.fov || 62, 0.1); cam.updateProjectionMatrix(); return }
+  if (G.camOverride) { const o = G.camOverride; if (o.snap) cam.position.copy(o.pos); else cam.position.lerp(o.pos, Math.min(1, dt * 4)); cam.lookAt(o.look); cam.fov = lerp(cam.fov, o.fov || 62, 0.1); cam.updateProjectionMatrix(); return }
   let ex, ey, ez, yaw = p.yaw, pitch = p.pitch, roll = 0
   if (p.mode === 'ride' && G.scooter) {
-    const sc = G.scooter, v = new THREE.Vector3(); sc.eye.getWorldPosition(v)
-    const q = new THREE.Quaternion(); sc.eye.getWorldQuaternion(q); const e = new THREE.Euler().setFromQuaternion(q, 'YXZ')
+    const sc = G.scooter, v = _va; sc.eye.getWorldPosition(v)
+    const q = _vq; sc.eye.getWorldQuaternion(q); const e = _ve.setFromQuaternion(q, 'YXZ')
     const spd = sc.speed, bump = Math.sin(performance.now() * 0.021) * 0.007 * clamp(Math.abs(spd) / 8, 0, 1)
     p.rideYaw = e.y; p.yaw = e.y + (p.lookOff || 0)
     cam.rotation.order = 'YXZ'; cam.position.set(v.x, v.y + bump, v.z); cam.rotation.set(p.pitch, p.yaw + Math.PI, -sc.lean * 0.5)
@@ -335,10 +459,37 @@ function updateCamera(dt) {
   cam.fov = lerp(cam.fov, (G.cfg.fov || 70) - p.crouch * 4 + (input.down('Shift') && p.vel > 2.5 ? 4 : 0), 0.08); cam.updateProjectionMatrix()
 }
 
+G.tpp = false
+G.toggleCam = function () { G.tpp = !G.tpp; audio.click(); ui.toast(G.tpp ? 'Teesra view (TPP) · C se wapas' : 'Pehla view (FPP)', 1.6) }
+// cinematic scene transitions: a crane move instead of a fade to black
+G.cine = { k: 0, target: 0, rate: 1 }
+G.cineSet = (k) => { G.cine.k = k; G.cine.target = k }
+G.cineTo = (target, sec = 1.4) => { G.cine.target = target; G.cine.rate = 1 / Math.max(0.2, sec) }
+function updateCamera(dt) {
+  updateCameraBase(dt)
+  const p = G.player, cam = G.camera, c = G.cine
+  vm.update(dt); body.update(dt)
+  if (G.camOverride) return
+  if (G.tpp) {
+    const dir = _va; cam.getWorldDirection(dir)
+    const right = _vb.crossVectors(dir, _up).normalize(), ride = p.mode === 'ride'
+    const L = G.level, indoor = L && L.isIndoors ? L.isIndoors(p.pos.x, p.pos.z) > 0.5 : false
+    cam.position.addScaledVector(dir, -(ride ? 3.2 : indoor ? 1.5 : 2.5)).addScaledVector(right, 0.45); cam.position.y += 0.2
+    if (!ride && L) { const q = { x: cam.position.x, z: cam.position.z }; L.walk.resolve(q, 0.25); cam.position.x = q.x; cam.position.z = q.z }
+    if (cam.position.y < 0.15) cam.position.y = 0.15
+  }
+  if (c.k !== c.target) { const d = c.rate * dt; c.k = c.k < c.target ? Math.min(c.target, c.k + d) : Math.max(c.target, c.k - d) }
+  if (c.k > 0.001) {
+    const e = c.k * c.k * (3 - 2 * c.k), dir = _vc; cam.getWorldDirection(dir); dir.y = 0; dir.normalize()
+    cam.position.addScaledVector(dir, -6.5 * e); cam.position.y += 7 * e
+    cam.rotation.x -= 0.5 * e; cam.rotation.z += 0.06 * e
+  }
+}
+
 function updateAudioState(dt) {
   const p = G.player, S = audio.st, env = G.env, L = G.level
   // torch smooth
-  const tl = G.torch; tl.intensity = damp(tl.intensity, G.torchOn ? 70 * G.torchPow : 0, 18, dt); G.torchFill.intensity = tl.intensity * 0.03
+  const tl = G.torch; tl.intensity = damp(tl.intensity, G.torchActive() ? 70 * G.torchPow : 0, 18, dt); G.torchFill.intensity = tl.intensity * 0.03
   G.torchTarget.position.x = damp(G.torchTarget.position.x, 0, 4, dt)
   // env -> audio
   const indoor = L.isIndoors ? L.isIndoors(p.pos.x, p.pos.z) : 0
@@ -352,15 +503,13 @@ function updateAudioState(dt) {
   S.bamboo = L.bambooNear ? clamp(1 - L.bambooNear(p.pos.x, p.pos.z) / 25, 0, 1) : 0
   if (L.ambient) L.ambient(S, p)
   if (L.tickAudio) L.tickAudio(dt)
-  const f = new THREE.Vector3(); G.camera.getWorldDirection(f)
-  audio.update(dt, G.camera.position, f, new THREE.Vector3(0, 1, 0))
+  const f = _va; G.camera.getWorldDirection(f)
+  audio.update(dt, G.camera.position, f, _up)
   // clock label visible only when allowed
 }
 
-G.checkPhone = function () {
-  audio.phoneBuzz(); const t = fmtClock(G.time)
-  ui.toast(G.hasSignal ? `📶 ${t} — signal OK` : `📵 ${t} — No service · Battery ${Math.max(6, Math.round(78 - (G.time < 12 ? G.time + 24 : G.time) * 0 - (G.time >= 19 ? (G.time - 19) * 6 : 0)))}%`, 3)
-}
+// story beats call this to show the phone on its own (opens the HUD phone briefly)
+G.checkPhone = function () { if (G.hasPhone === false) return; phone.toggle(true); clearTimeout(G._phT); G._phT = setTimeout(() => phone.close(), 3500) }
 
 // pointer events for debug in tests
 window.__G = G

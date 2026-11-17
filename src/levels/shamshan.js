@@ -24,6 +24,7 @@ export function build(G, opts = {}) {
   const wt = waterTank(); wt.position.set(-18, 0, 52); L.add(wt)
   // resting tree (banyan) with a low stone slab to sit on
   const by = makeBanyan(0.8); by.position.set(-14, 0, 40); L.add(by); L.walk.circle(-14, 40, 1.4)
+  L.refs.firePit = { x: -5.4, z: 45 }
   L.refs.tree = new THREE.Vector3(-9.5, 0, 40); L.refs.rest = new THREE.Vector3(-8.2, 0.4, 42)
   const slab = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 0.7), new THREE.MeshStandardMaterial({ color: '#8c8a80', roughness: 1 })); slab.position.set(-8.4, 0.2, 41); slab.rotation.y = 0.3; L.add(slab)
   // a single diya on one samadhi: the only light besides ours

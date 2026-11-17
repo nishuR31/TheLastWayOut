@@ -285,6 +285,7 @@ class AudioEngine {
   teaGlass() { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(null, this.busSfx); this._tone(2600, 2500, 0.3, 'sine', 0.12, o, t); this._burst(this.nWhite, 'highpass', 3500, 1, 0.03, 0.15, o, t) }
   chime(f = 440) { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(null, this.busSfx, 0.4); this._tone(f, f, 1.4, 'sine', 0.12, o, t); this._tone(f * 1.5, f * 1.5, 1.0, 'sine', 0.06, o, t) }
   flash() { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(null, this.busSfx); this._tone(2200, 3200, 0.08, 'sine', 0.05, o, t) }
+  crackle(pos, vol = 1) { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.4), n = 1 + Math.floor(Math.random() * 3); for (let i = 0; i < n; i++) this._burst(this.nWhite, 'bandpass', 1800 + Math.random() * 2600, 1.2, 0.025, 0.22 * vol, o, t + i * 0.03, 0.001) }
   click() { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(null, this.busSfx); this._burst(this.nWhite, 'bandpass', 2200, 2, 0.02, 0.2, o, t, 0.001) }
   thud(pos, v = 1) { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx); this._tone(120, 50, 0.16, 'sine', 0.5 * v, o, t); this._burst(this.nBrown, 'lowpass', 400, 1, 0.1, 0.4 * v, o, t) }
   clang(pos, v = 1) { if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.2); this._tone(900, 880, 0.5, 'triangle', 0.15 * v, o, t); this._tone(1450, 1400, 0.4, 'sine', 0.1 * v, o, t) }

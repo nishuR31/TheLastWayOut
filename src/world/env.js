@@ -3,6 +3,8 @@ import * as THREE from 'three'
 import { damp, lerp, R } from '../core/util.js'
 
 const C = (h) => new THREE.Color(h)
+// module-scope scratch objects — avoid per-frame allocations in update()
+const _sd = new THREE.Vector3(), _sunN = new THREE.Vector3()
 export const MOODS = {
   day:      { top: '#5f93c9', hor: '#cfe0e8', fog: 0.0035, amb: 0.9, hemiS: '#c8d8ee', hemiG: '#6b6a50', sun: 2.6, sunC: '#fff2d8', sunDir: [60, 80, 40], rain: 0, wind: 0.08, exposure: 1.0 },
   evening:  { top: '#4c6f9b', hor: '#f0a468', fog: 0.0065, amb: 0.65, hemiS: '#b9a690', hemiG: '#5a4b32', sun: 2.0, sunC: '#ffb067', sunDir: [-80, 22, 40], rain: 0, wind: 0.1, exposure: 1.0 },
@@ -59,9 +61,9 @@ export class Env {
     this._snap = false
     c.topC.lerp(C(m.top), k); c.horC.lerp(C(m.hor), k); c.sunCc.lerp(C(m.sunC), k); c.hemiSc.lerp(C(m.hemiS), k); c.hemiGc.lerp(C(m.hemiG), k)
     c.exposure = lerp(c.exposure ?? 1, m.exposure ?? 1, k); this.G.renderer.toneMappingExposure = 1.05 * c.exposure; c.fog = lerp(c.fog, m.fog, k); c.amb = lerp(c.amb, m.amb, k); c.sun = lerp(c.sun, m.sun, k); c.rain = lerp(c.rain, m.rain, k); c.wind = lerp(c.wind, m.wind, k)
-    const sd = new THREE.Vector3(...m.sunDir); c.sunDirV.lerp(sd, k)
+    _sd.set(m.sunDir[0], m.sunDir[1], m.sunDir[2]); c.sunDirV.lerp(_sd, k)
     this.hemi.color.copy(c.hemiSc); this.hemi.groundColor.copy(c.hemiGc); this.hemi.intensity = c.amb * (this.G.cfg.ambBoost || 1)
-    this.sun.color.copy(c.sunCc); this.sun.intensity = c.sun + this.flashV * 3; this.sun.position.copy(camPos).addScaledVector(c.sunDirV.clone().normalize(), 80); this.sun.target.position.copy(camPos)
+    this.sun.color.copy(c.sunCc); this.sun.intensity = c.sun + this.flashV * 3; this.sun.position.copy(camPos).addScaledVector(_sunN.copy(c.sunDirV).normalize(), 80); this.sun.target.position.copy(camPos)
     this.fog.color.copy(c.horC).multiplyScalar(0.9); this.fog.density = c.fog * (this.fogMul || 1)
     this.skyMat.uniforms.top.value.copy(c.topC); this.skyMat.uniforms.hor.value.copy(c.horC); this.skyMat.uniforms.sunDir.value.copy(c.sunDirV); this.skyMat.uniforms.sunC.value.copy(c.sunCc); this.skyMat.uniforms.sunI.value = c.sun > 0.2 ? 1 : 0
     this.skyMat.uniforms.stars.value = this.name === 'day' || this.name === 'evening' || this.name === 'homeDay' || this.name === 'dawn' ? 0 : (c.rain > 0.3 ? 0.1 : 1)
@@ -76,12 +78,14 @@ export class Env {
     const on = c.rain > 0.04 && !this.indoors; this.rain.visible = on
     if (on) {
       this.rainT += dt; const p = this.rain.geometry.attributes.position.array, n = Math.floor(this.rainN * Math.min(1, c.rain + 0.15) * this.G.cfg.rain), fall = 14, w = c.wind * 3
-      for (let i = 0; i < this.rainN; i++) {
-        if (i >= n) { p[i * 6] = p[i * 6 + 3] = 0; p[i * 6 + 1] = p[i * 6 + 4] = -999; continue }
+      for (let i = 0; i < n; i++) {
         const sx = this.rainSeed[i * 3], sy = this.rainSeed[i * 3 + 1], sz = this.rainSeed[i * 3 + 2]
         const y = ((sy - this.rainT * fall) % 14 + 14) % 14, x = camPos.x + ((sx + w * (14 - y) * 0.3 + 28) % 28) - 14, z = camPos.z + ((sz + 28) % 28) - 14, ln = 0.55
         p[i * 6] = x; p[i * 6 + 1] = camPos.y - 4 + y; p[i * 6 + 2] = z; p[i * 6 + 3] = x + w * 0.04; p[i * 6 + 4] = camPos.y - 4 + y + ln; p[i * 6 + 5] = z
       }
+      // Only hide drops that left the active range since the previous frame.
+      for (let i = n; i < (this.rainPrevN || 0); i++) { p[i * 6] = p[i * 6 + 3] = 0; p[i * 6 + 1] = p[i * 6 + 4] = -999 }
+      this.rainPrevN = n
       this.rain.geometry.attributes.position.needsUpdate = true; this.rain.material.opacity = 0.18 + c.rain * 0.25
     }
   }

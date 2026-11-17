@@ -33,7 +33,7 @@ export async function load(name, opts = {}, comp = { x: 0, z: 0, outfit: 'nishan
   }
   return L
 }
-export async function startScene(fadeSec = 1.6) { G.input.enabled = true; G.input.lock(); await ui.fade(0, fadeSec) }
+export async function startScene(fadeSec = 1.6) { G.input.enabled = true; G.input.lock(); G.cineSet(0); await ui.fade(0, fadeSec) }
 export async function endScene(fadeSec = 1.4) { await ui.fade(1, fadeSec) }
 
 // wait for the player to press E on something at pos

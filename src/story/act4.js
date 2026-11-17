@@ -36,7 +36,12 @@ export async function ch9(s) {
   ui.titleCard('CHAPTER 9', 'Uncle ke do dost', '3:50 AM', 3.4)
   G.clockRate = 5; fear(0.35); tired(0.95)
   await T('Uncle aur unke dost... itni raat ko hamare liye nikle. Shukriya.', 'The uncle and his friends... coming out at this hour for us. Thank you.', { dur: 4 })
-  await say('Dost', 'Humne baar-baar darwaza khatkhatate suna. Socha, koi musibat mein hai.', 'We heard the knocking again and again. We thought someone was in trouble.', { pos: m1.pos, dur: 4.4 })
+  await say('Uncle', 'Ye mere dost hain. Bhola aur Mangu.', 'These are my friends. Bhola and Mangu.', { pos: un.pos, dur: 3 })
+  await say('Bhola', 'Namaste.', 'Namaste.', { pos: m1.pos, dur: 1.6 })
+  await say('Mangu', 'Arre bacche, namaste! Chalo chalo, raat ho gayi.', 'Hey kids, namaste! Come on, it is late.', { pos: m2.pos, dur: 3 })
+  caption('[Mangu hums, under his breath, the exact tune Karan could never name]', 4)
+  await N('(dheere) Bhai, wahi dhun...', '(whisper) That same tune...', { dur: 2 })
+  await T('(dheere) Mat bol. Chal.', '(whisper) Do not say it. Keep walking.', { dur: 2 })
   ui.toast('Scooter dhakelte hue chalte raho', 4.5)
   await goTrail(W, 50)
   await N('Raasta... patla hota ja raha hai.', 'The path... it keeps getting narrower.', { dur: 2.8 })
@@ -194,8 +199,13 @@ export async function ch11(s) {
   // the two thoughts
   await N('Ye shamshan hai. Shayad yahi sabse safe jagah hai. Mujhe bhoot-vhoot pe yakeen nahi.', 'This is a cremation ground. Maybe it\'s the safest place. I don\'t believe in ghosts.', { dur: 4.8 })
   await T('Par ghar? Sab hamari raah dekh rahe honge. Aur network abhi bhi nahi hai.', 'But home? Everyone is waiting. And there is still no network.', { dur: 4.4 })
-  const k = await choose('Ab kya karein?', ['Uncle ki batayi disha mein chalein', 'Yahin shamshan mein ruk jaayein'])
-  s.branch = k === 0 ? 'A' : 'B'
+  caption('[the lantern still burns; the pale path leads to a gap in the trees; the peepal\'s stone platform is dry; something scrapes, very faintly, behind a distant wall]', 7)
+  await wait(3)
+  await T('Uncle ne wahi raasta dikhaya tha. Chalo.', 'The uncle showed us that way. Let us go.', { dur: 3 })
+  await N('Yahin ruk jaate hain. Subah ka intezaar karte hain.', 'Let us stay here and wait for morning.', { dur: 3 })
+  await T('Ya chhup ke dekhte hain. Kuch toh hoga.', 'Or we hide and watch. Something will happen.', { dur: 3 })
+  const k = await choose('Faisla (dono ka)', ['Uncle ka bataya raasta (Ending 1)', 'Peepal ke neeche ruko, jo aaye uske paas jao (Ending 2)', 'Ruko, chhup ke dekho (Ending 3)'])
+  s.branch = k === 0 ? 'A' : 'B'; s.pref = k
   await wait(0.4)
   if (k === 0) { await N('Chal. Jo bhi ho, rukna theek nahi.', 'Let\'s go. Whatever happens, waiting isn\'t right.', { dur: 3 }); await T('Scooter uthaate hain.', 'Let\'s take the scooter.', { dur: 2 }) }
   else { await N('Hum yahin rukte hain. Pehchaani jagah hai, subah ka intezaar karte hain.', 'We stay here. It\'s a known place. We wait for morning.', { dur: 3.8 }); await T('Theek hai. Par sote nahi.', 'Okay. But we don\'t sleep.', { dur: 2.4 }) }
@@ -356,7 +366,7 @@ export async function ch12b(s) {
   await wait(3)
   await T('Mera sar bhaari ho raha hai...', 'My head is getting heavy...', { dur: 2.6 })
   await wait(2)
-  await G.blink(1.2); await wait(1.2); ui.fade(0, 0.8); await wait(1)
+  await G.blink(1.2); await wait(1.2); ui.fade(0, 0.8, true); await wait(1)
   await N('Aankhein khuli rakh...', 'Keep your eyes open...', { dur: 2.2 })
   await wait(2)
   await G.blink(1.6); await wait(1.6)
@@ -364,7 +374,7 @@ export async function ch12b(s) {
   // first friend wakes: companion is gone
   c.setVisible(false); c.place(R.rest.x - 3, R.rest.z + 9, 0)
   fear(0.45)
-  await ui.fade(0, 1)
+  await ui.fade(0, 1, true)
   p.canMove = true
   fig.setVisible(true)
   const sw = loop(() => { audio.strike({ x: 29.2, y: 0.5, z: 60.6 }, 0.9) }, () => 1.05 + Math.random() * 0.25)
@@ -397,6 +407,53 @@ export async function ch12b(s) {
   await T('Aur usko thakaan bhi nahi ho rahi.', 'And he isn\'t getting tired.', { dur: 2.4 })
   await N('Kya hum phir kisi loop mein phans gaye?', 'Have we got stuck in another loop?', { dur: 2.6 })
   await T('Par ye shamshan hai. Yahan toh aisa nahi hona chahiye...', 'But this is a cremation ground. This shouldn\'t happen here...', { dur: 3.2 })
+  // the branch point from story.txt: approach the man (Ending 2 / C) or stay hidden and watch (Ending 3 / B)
+  const kk = s.pref === 1 ? 0 : 1
+  if (kk === 0) {
+    s.branch = 'C'
+    await N('Chal, usse poochhte hain. Shayad usse raasta pata ho.', 'Come on, let\'s ask him. Maybe he knows the way.', { dur: 3.2 })
+    await T('Yaar mat ja... mujhe theek nahi lag raha.', 'Don\'t, man... this doesn\'t feel right.', { dur: 2.8 })
+    ui.toast('Aadmi ki taraf chalo · Walk towards the man', 5)
+    const tg = R.target
+    await gate(() => G.distToPlayer(tg.x, tg.z) < 11, () => snapTo(tg.x - 8, tg.z - 8), 0, [tg.x - 4, tg.z - 4, 'Aadmi ke paas jao · Walk to the man'])
+    sw.on = false; audio.silence(true)
+    await wait(0.8); audio.silence(false)
+    fig.pose('stand'); fig.face(p.pos)
+    await N('Bhaiya...? Suniye...', 'Brother...? Excuse me...', { dur: 2.2 })
+    await wait(1.4)
+    caption('[the digging has stopped]', 2.6)
+    fear(0.9); audio.heartbeat(1)
+    await wait(1.6)
+    // he starts to turn... then runs. No face is ever clearly seen.
+    fig.look(p.pos)
+    await wait(1.0)
+    await T('Bhaag!!', 'RUN!!', { dur: 1.2 })
+    G.noRun = false; p.canMove = true; ui.fear(1)
+    c.mode = 'hold'; c.holdPos = null
+    c.walkTo(R.rest.x - 10, R.rest.z - 14, 4.2)
+    ui.toast('Daudo! Shift + W · Run! Hold Shift + W', 5)
+    let t = 0
+    const step = loop(() => { audio.footstep('ash', 1.2, { x: fig.pos.x, y: 0.1, z: fig.pos.z }); G.camShake(0.25) }, 0.28)
+    await G.until(() => {
+      t += G.lastDt
+      const dx = p.pos.x - fig.pos.x, dz = p.pos.z - fig.pos.z, d = Math.hypot(dx, dz)
+      fig.path = [{ x: p.pos.x, z: p.pos.z }]; fig.walkSpeed = t < 7 ? 3.4 : 4.6
+      if (t > 3.5) p.roll = Math.sin(t * 9) * 0.05
+      return t > 9 || d < 1.6
+    })
+    // trip on a root, fall into the excavation
+    step.on = false; p.roll = 0; p.canMove = false; fig.path = []
+    audio.fall(p.pos); G.camShake(0.9); ui.flash(0.6)
+    caption('[a heavy fall. Mud. Then nothing.]', 3)
+    p.headDip = 1
+    await wait(1.2)
+    audio.silence(true)
+    G.removeActor(fig); wl.visible = false
+    await wait(1.4)
+    audio.silence(false)
+    p.headDip = 0
+    return
+  }
   // the voice behind
   const behind = { x: p.pos.x - Math.sin(p.yaw) * 3, y: 1.5, z: p.pos.z - Math.cos(p.yaw) * 3 }
   await say('Awaaz', 'Yahan kya kar rahe ho?', 'What are you doing here?', { pos: behind, id: 'awaaz_1', dur: 2.6 })
@@ -443,7 +500,7 @@ export async function ch12b(s) {
   audio.heartbeat(1)
   await wait(3.4)
   // they faint: no chase, no attack
-  await ui.fade(1, 1.8)
+  await ui.fade(1, 1.8, true)
   audio.silence(true)
   G.removeActor(tall)
   await wait(2)
@@ -551,4 +608,52 @@ export async function ch14b(s) {
   await wait(2.4)
   await endScene(2.8)
   s.onEnd('ENDING B — Chai ke saath ek sawaal', 'Zyadatar baaton ke saaf jawaab mil gaye. Par us laal sharbat ka koi jawaab nahi mila.')
+}
+
+/* ------------------------------------------------------------------ ENDING C (approach the man: the pit, the hospital) */
+export async function ch13c(s) {
+  setTime(8.0, 0, false, true)
+  const L = await load('hospital', {}, { dx: 1.2 })
+  const c = G.comp, p = P(), R = L.refs
+  G.hasSignal = false; G.torchOn = false; fear(0); tired(0.8)
+  p.pos.set(R.bed1.x, 0, R.bed1.z); p.yaw = 0; p.canMove = false; p.headDip = 0.9
+  c.place(R.bed2.x, R.bed2.z, 0); c.pose('sit'); c.mode = 'hold'; c.holdPos = null
+  const nurse = spawn('neighbor', R.inside.x - 0.8, R.inside.z, -0.4)
+  G.clockRate = 4
+  await startScene(1.6)
+  ui.titleCard('ENDING C', 'Aspatal', 'Subah · Morning', 3)
+  await wait(1.2)
+  caption('[a ceiling fan. Distant voices. A trolley rolling down a corridor.]', 3.4)
+  await wait(2.4)
+  await N('...chhat. Safed chhat.', '...a ceiling. A white ceiling.', { dur: 2.4 })
+  await say('Attendant', 'Hosh aa gaya. Hilo mat, drip lagi hai.', 'He\'s awake. Don\'t move, there\'s a drip in.', { pos: nurse.pos, dur: 3 })
+  await N('Nishant? Nishant kahan hai?', 'Nishant? Where is Nishant?', { dur: 2.4 })
+  await say('Attendant', 'Bagal wale bistar par. Zinda hai, ghabrao mat.', 'In the next bed. He\'s alive, don\'t panic.', { pos: nurse.pos, dur: 3 })
+  p.canMove = true; p.headDip = 0.35
+  nurse.walkTo(R.inside.x - 0.4, R.inside.z + 1.2, 1.3)
+  await T('Bhai... tu theek hai?', 'Man... are you okay?', { dur: 2.2 })
+  await N('Haan. Hum... kahan the?', 'Yes. Where... were we?', { dur: 2.2 })
+  await say('Attendant', 'Subah gaon waalon ne tum dono ko khudai ke gadde mein paaya. Scooter bagal mein padi thi. Chot aur sadma, bas.', 'Villagers found you both this morning in the excavation pit. The scooter was beside you. Injuries and shock, that\'s all.', { pos: nurse.pos, dur: 6 })
+  await N('Ek aadmi tha... wo bhaaga humare peeche...', 'There was a man... he ran after us...', { dur: 3 })
+  await T('Mujhe sirf daudna yaad hai. Koi chehra nahi.', 'I only remember running. No face.', { dur: 3 })
+  await say('Attendant', 'Raat mein ghaaon ke paas koi nahi jaata. Shayad gir gaye ho, ghabra gaye ho. Doctor sahab aayenge.', 'Nobody goes near that ground at night. Maybe you fell, got scared. The doctor will come.', { pos: nurse.pos, dur: 5 })
+  reveal('samadhi', 'microsleep')
+  nurse.walkTo(R.door.x, R.door.z + 3, 1.4)
+  await wait(3)
+  const mom = spawn('mother', R.door.x, R.door.z + 1.5, Math.PI)
+  mom.walkTo(R.inside.x, R.inside.z - 0.6, 1.9)
+  await say('Mummy', 'Beta! Dono ko dekho... Bhagwan ka shukar hai.', 'My boys! Thank God, thank God.', { pos: mom.pos, dur: 3.6 })
+  await N('Mummy... hum shaam tak aana chahte the.', 'Mom... we meant to be back by evening.', { dur: 3 })
+  await wait(4)
+  // quiet unresolved beat: a muddy footprint and a heavy impact outside
+  R.footprint.visible = true
+  await wait(1)
+  audio.thud({ x: R.door.x, y: 1, z: R.door.z + 9 }, 0.9)
+  caption('[a heavy impact, outside the ward]', 3)
+  fear(0.4)
+  await wait(1.6)
+  await T('Tune suna?', 'Did you hear that?', { dur: 1.8 })
+  await wait(2.4)
+  await endScene(2.6)
+  s.onEnd('ENDING C — Khudai ka gadda', 'Dono zinda hain. Gadda asli tha. Peechha karne wala koi nahi mila.')
 }

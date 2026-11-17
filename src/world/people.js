@@ -23,6 +23,10 @@ export const OUTFITS = {
   kid: { skin: '#996444', hair: '#0e0a08', hairStyle: 'short', top: ['#2f6a9a', '#e8e8e8', 'stripe'], long: false, bottom: '#243040', shoes: '#c8c8c8', h: 1.25, face: { brow: '#120c08' } },
   neighbor: { skin: '#946141', hair: '#201a14', hairStyle: 'short', top: ['#8a3a3a', '#d6b8a0', 'check'], long: false, bottom: '#3a3a3a', shoes: '#3a2f25', h: 1.7, face: { stache: true, brow: '#1a120c' } },
   shadow: { skin: '#050505', hair: '#000', hairStyle: 'short', top: ['#050505', '#050505', 'plain'], long: true, bottom: '#050505', shoes: null, h: 1.74, flat: true, face: { brow: '#000' } },
+  arunab: { skin: '#8a5a3b', hair: '#2a2622', hairStyle: 'short', top: ['#3a4a3a', '#8aa08a', 'check'], long: true, bottom: '#2d2d30', shoes: '#4a3a2a', h: 1.74, face: { stache: true, beard: 0.25, brow: '#1a120c', age: 1 } },
+  karan: { skin: '#a06a46', hair: '#120d0a', hairStyle: 'short', top: ['#222426', '#46494c', 'plain'], long: false, bottom: '#3a4a6a', shoes: '#c8c8c8', h: 1.76, face: { stache: false, beard: 0.1, brow: '#17100b' } },
+  aman: { skin: '#9a6544', hair: '#14100d', hairStyle: 'short', top: ['#b04a2a', '#e0b090', 'stripe'], long: false, bottom: '#4a4a3a', shoes: '#2a2a2a', h: 1.72, glasses: true, face: { stache: false, brow: '#17100b' } },
+  rohan: { skin: '#a46d49', hair: '#0e0a08', hairStyle: 'short', top: ['#2f6a9a', '#e8e8e8', 'stripe'], long: false, bottom: '#243040', shoes: '#c8c8c8', h: 1.62, face: { brow: '#120c08' } },
   tall: { skin: '#a8a094', hair: '#0a0a0a', hairStyle: 'thin', top: ['#3a3630', '#2a2724', 'plain'], long: true, bottom: '#2d2a26', shoes: null, h: 2.55, thin: 0.52, tallFace: true }
 }
 
@@ -62,7 +66,7 @@ export function makePerson(name, over = {}) {
   const pelvisW = 0.2 * sc * thin * (o.female ? 1.05 : 1)
   // torso
   const torso = new THREE.Group(); hips.add(torso)
-  const chest = mk(cyl(0.2 * sc * thin, 0.17 * sc * thin, torsoL, 24), topM, torso, 0, torsoL / 2, 0); chest.scale.z = 0.62
+  const chest = mk(cyl(0.2 * sc * thin, 0.17 * sc * thin, torsoL, 14), topM, torso, 0, torsoL / 2, 0); chest.scale.z = 0.62
   if (o.kurta || o.saree) { const skirtLen = o.saree ? 0.75 * sc : 0.38 * sc; const sk = mk(cyl(0.17 * sc * thin, o.saree ? 0.26 * sc : 0.23 * sc, skirtLen, 12), o.saree ? botM : topM, hips, 0, -skirtLen / 2 + 0.05, 0); sk.scale.z = 0.8 }
   const hipM = mk(cyl(0.165 * sc * thin, 0.17 * sc * thin, 0.2 * sc, 12), botM, hips, 0, -0.02, 0); hipM.scale.z = 0.7
   if (o.apron) { const ap = mk(new THREE.BoxGeometry(0.34 * sc, 0.6 * sc, 0.03), M({ color: '#5e564a' }), torso, 0, torsoL * 0.4, 0.17 * sc) }
@@ -72,7 +76,7 @@ export function makePerson(name, over = {}) {
   mk(cyl(0.045 * sc, 0.055 * sc, neck + 0.05, 8), skinM, torso, 0, torsoL + 0.0, 0)
   const headR = 0.112 * sc * (o.tallFace ? 0.9 : 1)
   const headM = new THREE.MeshStandardMaterial({ map: headTexture(o), roughness: 0.75 })
-  const head = new THREE.Mesh(new THREE.SphereGeometry(headR, 40, 28), headM); head.scale.set(0.86 * thin * 1.1, 1.15, 1.0); head.position.y = headR * 1.05; head.castShadow = true; headG.add(head)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(headR, 22, 16), headM); head.scale.set(0.86 * thin * 1.1, 1.15, 1.0); head.position.y = headR * 1.05; head.castShadow = true; headG.add(head)
   // ears + nose bump for silhouette
   ;[-1, 1].forEach(s => mk(new THREE.SphereGeometry(headR * 0.2, 8, 6), skinM, headG, s * headR * 0.88 * thin, headR * 1.05, -0.005))
   mk(new THREE.SphereGeometry(headR * 0.16, 8, 6), skinM, headG, 0, headR * 0.98, headR * 0.98).scale.set(0.8, 1.1, 1.0)
@@ -82,9 +86,9 @@ export function makePerson(name, over = {}) {
   // hair
   const hs = o.hairStyle
   if (hs !== 'bald') {
-    if (hs === 'turban') { const t = mk(new THREE.SphereGeometry(headR * 1.18, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), M({ map: tex.cloth(o.turban, '#ffffff', 'stripe'), roughness: 1 }), headG, 0, headR * 1.12, -headR * 0.06); t.scale.set(0.98 * thin * 1.05, 1.0, 1.08) }
+    if (hs === 'turban') { const t = mk(new THREE.SphereGeometry(headR * 1.18, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62), M({ map: tex.cloth(o.turban, '#ffffff', 'stripe'), roughness: 1 }), headG, 0, headR * 1.12, -headR * 0.06); t.scale.set(0.98 * thin * 1.05, 1.0, 1.08) }
     else {
-      const cap = mk(new THREE.SphereGeometry(headR * (hs === 'thin' ? 1.02 : 1.07), 18, 12, 0, Math.PI * 2, 0, Math.PI * (hs === 'thin' ? 0.42 : 0.52)), hairM, headG, 0, headR * 1.12, -headR * 0.1); cap.scale.set(0.9 * thin * 1.1, 1.12, 1.08)
+      const cap = mk(new THREE.SphereGeometry(headR * (hs === 'thin' ? 1.02 : 1.07), 12, 8, 0, Math.PI * 2, 0, Math.PI * (hs === 'thin' ? 0.42 : 0.52)), hairM, headG, 0, headR * 1.12, -headR * 0.1); cap.scale.set(0.9 * thin * 1.1, 1.12, 1.08)
       if (hs === 'long' || hs === 'braids') { ;[-1, 1].forEach(s => { for (let i = 0; i < 5; i++) mk(new THREE.SphereGeometry(0.03 * sc, 6, 5), hairM, headG, s * 0.07 * sc, headR * 0.7 - i * 0.07 * sc, -headR * 0.9 - i * 0.012) }) }
       if (hs === 'bun') mk(new THREE.SphereGeometry(headR * 0.5, 10, 8), hairM, headG, 0, headR * 1.2, -headR * 1.0)
     }
@@ -97,11 +101,11 @@ export function makePerson(name, over = {}) {
   for (const s of [-1, 1]) {
     const sh = new THREE.Group(); sh.position.set(s * (0.205 * sc * thin + 0.035), torsoL - 0.06, 0); torso.add(sh)
     const upL = 0.29 * sc, loL = 0.27 * sc
-    mk(new THREE.SphereGeometry(0.05 * sc, 14, 10), o.saree || o.top ? topM : skinM, sh, 0, 0, 0)
-    mk(new THREE.CapsuleGeometry(0.043 * sc, upL - 0.086 * sc, 4, 12), o.saree || o.top ? topM : skinM, sh, 0, -upL / 2, 0)
+    mk(new THREE.SphereGeometry(0.05 * sc, 8, 6), o.saree || o.top ? topM : skinM, sh, 0, 0, 0)
+    mk(new THREE.CapsuleGeometry(0.043 * sc, upL - 0.086 * sc, 2, 8), o.saree || o.top ? topM : skinM, sh, 0, -upL / 2, 0)
     const el = new THREE.Group(); el.position.y = -upL; sh.add(el)
-    mk(new THREE.CapsuleGeometry(0.036 * sc, loL - 0.072 * sc, 4, 12), sleeveLong ? topM : skinM, el, 0, -loL / 2, 0)
-    const hand = mk(new THREE.SphereGeometry(0.043 * sc, 14, 10), skinM, el, 0, -loL - 0.02, 0); hand.scale.set(0.9, 1.25, 0.6)
+    mk(new THREE.CapsuleGeometry(0.036 * sc, loL - 0.072 * sc, 2, 8), sleeveLong ? topM : skinM, el, 0, -loL / 2, 0)
+    const hand = mk(new THREE.SphereGeometry(0.043 * sc, 8, 6), skinM, el, 0, -loL - 0.02, 0); hand.scale.set(0.9, 1.25, 0.6)
     if (o.bangles) for (let i = 0; i < 3; i++) { const b = mk(new THREE.TorusGeometry(0.034 * sc, 0.006, 5, 10), M({ color: i % 2 ? '#c8a21a' : '#2a8a4a', metalness: 0.7, roughness: 0.3 }), el, 0, -loL + 0.01 - i * 0.012, 0); b.rotation.x = Math.PI / 2 }
     arms.push({ sh, el })
   }
@@ -110,11 +114,11 @@ export function makePerson(name, over = {}) {
   for (const s of [-1, 1]) {
     const hp = new THREE.Group(); hp.position.set(s * pelvisW * 0.55, -0.04, 0); hips.add(hp)
     const thL = legL * 0.5, shL = legL * 0.5 - 0.06
-    const trouser = o.lungi ? botM : botM
-    const th = mk(new THREE.CapsuleGeometry(0.075 * sc * thin, Math.max(0.05, thL - 0.15 * sc * thin), 4, 14), trouser, hp, 0, -thL / 2, 0)
+    const trouser = botM
+    const th = mk(new THREE.CapsuleGeometry(0.075 * sc * thin, Math.max(0.05, thL - 0.15 * sc * thin), 2, 8), trouser, hp, 0, -thL / 2, 0)
     const kn = new THREE.Group(); kn.position.y = -thL; hp.add(kn)
-    mk(new THREE.CapsuleGeometry(0.052 * sc * thin, Math.max(0.05, shL - 0.104 * sc * thin), 4, 14), o.lungi ? skinM : trouser, kn, 0, -shL / 2, 0)
-    const foot = mk(new THREE.SphereGeometry(0.06 * sc, 14, 10), shoeM, kn, 0, -shL - 0.03, 0.06 * sc); foot.scale.set(0.85, 0.55, 2.1)
+    mk(new THREE.CapsuleGeometry(0.052 * sc * thin, Math.max(0.05, shL - 0.104 * sc * thin), 2, 8), o.lungi ? skinM : trouser, kn, 0, -shL / 2, 0)
+    const foot = mk(new THREE.SphereGeometry(0.06 * sc, 8, 6), shoeM, kn, 0, -shL - 0.03, 0.06 * sc); foot.scale.set(0.85, 0.55, 2.1)
     legs.push({ hp, kn, foot })
   }
   if (o.lungi) { const l = mk(cyl(0.2 * sc, 0.25 * sc, 0.62 * sc, 12), botM, hips, 0, -0.3 * sc, 0); l.scale.z = 0.8; l.material = M({ map: tex.cloth(o.bottom, '#d9d2b0', 'check') }) }
@@ -179,8 +183,8 @@ export function makeTorch() {
 }
 export function makeGlass(fill = true, col = '#a1121b') {
   const g = new THREE.Group()
-  const gl = new THREE.Mesh(cyl(0.036, 0.028, 0.1, 16, 1), new THREE.MeshPhysicalMaterial({ color: '#dfe8ee', transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0, clearcoat: 1 })); gl.position.y = 0.05; g.add(gl)
-  if (fill) { const l = new THREE.Mesh(cyl(0.033, 0.0275, 0.075, 16), new THREE.MeshStandardMaterial({ color: col, roughness: 0.25, emissive: new THREE.Color(col).multiplyScalar(0.06) })); l.position.y = 0.043; l.name = 'liquid'; g.add(l) }
+  const gl = new THREE.Mesh(cyl(0.036, 0.028, 0.1, 12), new THREE.MeshPhysicalMaterial({ color: '#dfe8ee', transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0, clearcoat: 1 })); gl.position.y = 0.05; g.add(gl)
+  if (fill) { const l = new THREE.Mesh(cyl(0.033, 0.0275, 0.075, 12), new THREE.MeshStandardMaterial({ color: col, roughness: 0.25, emissive: new THREE.Color(col).multiplyScalar(0.06) })); l.position.y = 0.043; l.name = 'liquid'; g.add(l) }
   return g
 }
 export function makeSteelGlass() {
@@ -188,7 +192,7 @@ export function makeSteelGlass() {
 }
 export function makeTiffin() {
   const g = new THREE.Group(); const st = new THREE.MeshStandardMaterial({ color: '#c3c7cc', metalness: 0.9, roughness: 0.3 })
-  for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(cyl(0.085, 0.085, 0.07, 18), st); c.position.y = 0.04 + i * 0.075; g.add(c); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.086, 0.004, 5, 18), st); ring.rotation.x = Math.PI / 2; ring.position.y = 0.075 + i * 0.075; g.add(ring) }
+  for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(cyl(0.085, 0.085, 0.07, 12), st); c.position.y = 0.04 + i * 0.075; g.add(c); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.086, 0.004, 5, 18), st); ring.rotation.x = Math.PI / 2; ring.position.y = 0.075 + i * 0.075; g.add(ring) }
   const h = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.006, 5, 14, Math.PI), st); h.position.y = 0.3; h.rotation.z = 0; g.add(h)
   const bar = new THREE.Mesh(cyl(0.004, 0.004, 0.28), st); bar.position.set(0.09, 0.16, 0); g.add(bar); const bar2 = bar.clone(); bar2.position.x = -0.09; g.add(bar2)
   return g

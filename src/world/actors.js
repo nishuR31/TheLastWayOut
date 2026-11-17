@@ -4,6 +4,8 @@ import { makePerson } from './people.js'
 import { angDiff, damp, clamp } from '../core/util.js'
 import { audio } from '../core/audio.js'
 
+const _q = new THREE.Quaternion(), _e = new THREE.Euler()
+
 export class Actor {
   constructor(G, outfit, over = {}) {
     this.G = G; this.key = outfit; this.P = makePerson(outfit, over); this.root = this.P.root
@@ -27,7 +29,7 @@ export class Actor {
   }
   update(dt) {
     const G = this.G
-    if (this.attach) { this.attach.getWorldPosition(this.pos); this.pos.y -= 0.0; const q = new THREE.Quaternion(); this.attach.getWorldQuaternion(q); const e = new THREE.Euler().setFromQuaternion(q, 'YXZ'); this.yaw = e.y; this.root.rotation.y = e.y; this.P.update(dt, 0); this.root.position.y = this.pos.y - this.P.legL * 0.0; return }
+    if (this.attach) { this.attach.getWorldPosition(this.pos); this.pos.y -= 0.0; const q = _q; this.attach.getWorldQuaternion(q); const e = _e.setFromQuaternion(q, 'YXZ'); this.yaw = e.y; this.root.rotation.y = e.y; this.P.update(dt, 0); this.root.position.y = this.pos.y - this.P.legL * 0.0; return }
     let moving = 0
     if (this.path.length) {
       const w = this.path[0], dx = w.x - this.pos.x, dz = w.z - this.pos.z, d = Math.hypot(dx, dz)

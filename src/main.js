@@ -11,15 +11,18 @@ import { ui } from './core/ui.js'
 import { REALITY, getUnlocked } from './reality.js'
 import { CHAPTERS, play, stopStory } from './story/story.js'
 import { nav } from './core/nav.js'
+import { phone } from './core/phone.js'
+import { fire } from './core/fire.js'
+import { fmtClock } from './core/util.js'
 
 const $ = (id) => document.getElementById(id)
 const SKEY = 'tlwo_settings_v1'
-const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, tts: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1 }
+const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1 }
 let S = { ...defaults, ...(() => { try { return JSON.parse(localStorage.getItem(SKEY) || '{}') } catch (e) { return {} } })() }
 let inGame = false, screenStack = [], pausedNow = false
 
 // ---------- screens ----------
-const SCREENS = ['menu', 'chapters', 'settings', 'controls', 'pause', 'report', 'endcard', 'map']
+const SCREENS = ['menu', 'chapters', 'settings', 'controls', 'pause', 'report', 'endcard', 'map', 'inventory']
 function showScreen(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id)); screenStack.push(id) }
 function hideScreens() { SCREENS.forEach(s => $(s).classList.add('hidden')); screenStack = [] }
 let backTo = 'menu'
@@ -27,7 +30,7 @@ let backTo = 'menu'
 // ---------- settings ----------
 function applySettings() {
   audio.vol.master = +S.master; audio.vol.voice = +S.voice; audio.vol.amb = +S.amb; audio.vol.sfx = +S.sfx; audio.applyVolumes()
-  input.sens = +S.sens; ui.subMode = S.subs; ui.caps = !!S.caps; ui.tts = false; ui.voiceLang = S.vlang
+  input.sens = +S.sens; ui.subMode = S.subs; ui.caps = !!S.caps; ui.voiceLang = S.vlang
   nav.setMode(S.nav); G.cfg.fov = +S.fov; document.documentElement.style.setProperty('--subsz', S.subsz);
   G.cfg.reduceShake = !!S.shake; G.cfg.reduceFlash = !!S.flash; ui.reduceFlash = !!S.flash
   if (G.renderer) G.setGfx(S.gfx); else G.cfg.gfx = S.gfx
@@ -62,7 +65,7 @@ function renderReport(head, onlyUnlocked = false) {
 function pauseGame() {
   if (!inGame || pausedNow || mapOpen) return
   pausedNow = true; G.paused = true; input.enabled = false; input.unlock(); if (audio.ctx) audio.ctx.suspend()
-  backTo = 'pause'; showScreen('pause')
+  backTo = 'pause'; renderPauseInfo(); showScreen('pause')
 }
 function resumeGame() {
   if (!pausedNow) return
@@ -92,6 +95,90 @@ addEventListener('keydown', e => {
 }, true)
 window.__openMap = openMap
 
+
+// ---------- inventory (I) ----------
+let invOpen = false, invFromPause = false
+function invItems() {
+  const bat = phone.battery(), have = (v) => v !== false && v !== undefined && v !== null
+  const items = [
+    { ic: '📱', n: 'Phone', ok: G.hasPhone !== false, ct: bat + '%', t: G.hasSignal ? 'Network hai · P kholo, F flashlight' : 'Network nahi · P kholo, F flashlight' },
+    { ic: '🔑', n: 'Scooter ki chabi', ok: G.hasKey !== false, t: 'B — scooter par baitho / utro' },
+    { ic: '🪖', n: 'Helmet', ok: G.hasHelmet !== false, t: 'Dono ke helmet' },
+    { ic: '💵', n: 'Paise', ok: (G.money || 0) > 0, ct: '₹' + (G.money || 0), t: 'Chacha ne diye the' },
+    { ic: '🔥', n: 'Matchbox', ok: (G.matches || 0) > 0, ct: G.matches || 0, t: (G.matches || 0) > 0 ? `${G.matches} teeli bachi hain` : 'Teeliyan geeli / khatam' },
+    { ic: '🪔', n: 'Lighter', ok: false, t: 'Nahi hai. Mummy ne ghar se hata diya tha' },
+    { ic: '🪵', n: 'Sookhi lakdi', ok: fire.count > 0, ct: fire.count, t: 'E — uthao · T — aag banao (3) · pit par E (2)', hot: fire.count >= 3 },
+    { ic: '🔧', n: 'Spare spark plug', ok: !!G.sparePlug, t: 'Chacha ke toolbox se · chingari ke liye' },
+    { ic: '⛽', n: 'Petrol (dhakkan)', ok: !!G.petrol, t: 'Aag bhadkane ke liye, thoda sa' },
+    { ic: '🏏', n: 'Jalti lakdi (mashaal)', ok: !!G.brand, t: 'Garam rehti hai, aage ki taraf nahi jhukti' },
+    { ic: '🍪', n: 'Biscuit ka tiffin', ok: !!G.hasTiffin, t: 'Mummy ne diya' },
+    { ic: '📷', n: 'Photos', ok: (G.photos || 0) > 0, ct: G.photos || 0, t: 'Camp ki yaadein' }
+  ]
+  return items
+}
+function invTip() {
+  const L = G.level, tips = []
+  if (fire.count >= 3) tips.push('Tumhare paas 3+ sookhi lakdi hai: <kbd>T</kbd> dabao aur aag banao (khule mein baarish se bujh jaati hai, shelter mein tikti hai).')
+  else if (fire.count > 0) tips.push('Aag ke liye 3 sookhi lakdi chahiye. Patte-lakdi jungle mein raaste ke kinare milti hai (<kbd>E</kbd>).')
+  if (G.hasPhone === false) tips.push('Phone abhi mez par rah gaya hai.')
+  if (G.hasKey === false) tips.push('Scooter ki chabi deewar ke hook par rah gayi hai.')
+  if (!tips.length) tips.push('Sab kuch saath hai. <kbd>I</kbd> dobara dabao band karne ke liye.')
+  return tips.join('<br>')
+}
+function renderInventory() {
+  const box = $('inv-grid'); box.innerHTML = ''
+  for (const it of invItems()) {
+    const c = document.createElement('div'); c.className = 'inv-card' + (it.ok ? '' : ' off') + (it.hot ? ' hot' : '')
+    c.innerHTML = `<div class="ic">${it.ic}</div>${it.ct !== undefined && it.ok ? `<div class="ct">${it.ct}</div>` : ''}<h4>${it.n}</h4><small>${it.t}</small>`
+    box.appendChild(c)
+  }
+  $('inv-tip').innerHTML = invTip()
+}
+function openInventory(fromPause = false) {
+  if (!inGame || invOpen || mapOpen) return
+  invFromPause = fromPause
+  if (!pausedNow) { pausedNow = true; G.paused = true; input.enabled = false; input.unlock(); if (audio.ctx) audio.ctx.suspend() }
+  invOpen = true; renderInventory(); backTo = 'pause'; showScreen('inventory')
+}
+function closeInventory() {
+  if (!invOpen) return
+  invOpen = false
+  if (invFromPause) { renderPauseInfo(); showScreen('pause'); return }
+  pausedNow = false; hideScreens(); G.paused = false; input.enabled = true; if (audio.ctx) audio.ctx.resume(); input.lock()
+}
+function renderPauseInfo() {
+  const el = $('pause-info'); if (!el) return
+  const ok = (v) => (v === false ? '✗' : '✓')
+  el.innerHTML = `<b>${fmtClock(G.time)}</b> · ${G.level ? G.level.name : ''}<br>📱 ${ok(G.hasPhone)}  🔑 ${ok(G.hasKey)}  🪖 ${ok(G.hasHelmet)}  🪵 ${fire.count}  🔥 ${G.matches || 0}  📷 ${G.photos || 0}`
+}
+// compact always-visible item strip (bottom-left)
+setInterval(() => {
+  const el = $('twigs'); if (!el) return
+  if (!inGame || pausedNow) { el.classList.remove('show'); return }
+  const m = (v) => (v === false ? '✗' : '')
+  el.textContent = `📱${m(G.hasPhone)} 🔑${m(G.hasKey)}${fire.count ? '  🪵' + fire.count : ''}${(G.matches || 0) ? '  🔥' + G.matches : ''}${G.brand ? '  🏏' : ''}   [I]`
+  el.classList.add('show')
+}, 400)
+
+// ---------- keyboard shortcuts for every menu: the highlighted letter ----------
+addEventListener('keydown', e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+  const vis = (id) => { const el = $(id); return !!el && !el.classList.contains('hidden') }
+  const k = e.code.startsWith('Key') ? e.code.slice(3) : e.code
+  const hit = (id) => { const el = $(id); if (el && !el.classList.contains('hidden')) { e.preventDefault(); e.stopImmediatePropagation(); el.click(); return true } return false }
+  if (k === 'I' && inGame) {
+    e.preventDefault(); e.stopImmediatePropagation()
+    if (invOpen) closeInventory(); else if (vis('pause')) openInventory(true); else if (!pausedNow) openInventory(false)
+    return
+  }
+  if (vis('menu')) { const m = { N: 'm-start', C: 'm-chapters', R: 'm-log', S: 'm-settings', K: 'm-controls', Q: 'm-quit' }; if (m[k]) hit(m[k]); return }
+  if (vis('pause')) { const m = { R: 'p-resume', S: 'p-settings', C: 'p-controls', M: 'p-menu', Q: 'p-quit' }; if (m[k]) hit(m[k]); return }
+  if (vis('endcard')) { const m = { R: 'e-report', M: 'e-menu' }; if (m[k]) hit(m[k]); return }
+  if (invOpen && (k === 'Escape' || k === 'B')) { e.preventDefault(); e.stopImmediatePropagation(); closeInventory(); return }
+  if (['settings', 'controls', 'chapters', 'report'].some(vis) && (k === 'B' || k === 'Backspace')) { const b = document.querySelector('.screen:not(.hidden) .back, #r-close:not(.hidden)'); if (b) { e.preventDefault(); b.click() } }
+}, true)
+window.__openInventory = openInventory
+
 // ---------- game start ----------
 async function startGame(chIdx = 0) {
   audio.init(); applySettings()
@@ -101,9 +188,16 @@ async function startGame(chIdx = 0) {
   if (!G.running) G.start()
   try {
     const res = await play(chIdx, { onEnd: showEnd })
-  } catch (e) { if (e !== 'abort') console.error(e) }
+  } catch (e) {
+    if (e !== 'abort') {
+      console.error(e)
+      ui.toast('कहानी लोड नहीं हो सकी · Story could not load', 6)
+      setTimeout(() => { if (inGame) toMenu() }, 2500)
+    }
+  }
 }
 function toMenu() {
+  phone.close(); invOpen = false
   mapOpen = false; document.body.classList.remove('map-open'); stopStory(); inGame = false; pausedNow = false; G.paused = false; input.enabled = false; input.unlock()
   ui.show('hud', false); ui.fadeInstant(1); if (audio.ctx) { audio.ctx.resume(); audio.st.engine = 0 }
   renderReport(null); backTo = 'menu'; showScreen('menu'); $('m-quit').classList.toggle('hidden', !window.electronAPI)
@@ -132,6 +226,10 @@ function wire() {
   $('p-settings').onclick = () => { backTo = 'pause'; showScreen('settings') }
   $('p-controls').onclick = () => { backTo = 'pause'; showScreen('controls') }
   $('p-menu').onclick = toMenu
+  $('p-inv').onclick = () => openInventory(true)
+  $('inv-close').onclick = closeInventory
+  $('p-quit').onclick = () => window.electronAPI && window.electronAPI.quit()
+  $('p-quit').classList.toggle('hidden', !window.electronAPI)
   $('r-close').onclick = () => { if (backTo === 'end') showScreen('endcard'); else showScreen('menu') }
   $('e-report').onclick = () => { renderReport(null); backTo = 'end'; showScreen('report') }
   $('e-menu').onclick = toMenu
@@ -147,4 +245,8 @@ const q = new URLSearchParams(location.search)
 renderReport(null)
 if (q.has('ch')) { startGame(+q.get('ch') || 0) } else { ui.fadeInstant(1); showScreen('menu'); ui.show('hud', true); $('m-quit').classList.toggle('hidden', !window.electronAPI) }
 if (q.has('auto')) { G.auto = true; if (q.get('auto') === 'b') G.autoPick = 1; if (q.has('ts')) G.timeScale = +q.get('ts'); if (q.has('fast')) G.fastSim = +q.get('fast') }
+phone.init(G, {
+  settings: () => { pauseGame(); backTo = 'pause'; showScreen('settings') },
+  menu: () => pauseGame()
+})
 window.__startGame = startGame

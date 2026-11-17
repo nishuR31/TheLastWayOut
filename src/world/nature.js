@@ -39,7 +39,7 @@ export function scatterForest(G, opts) {
     tr.push(mtx(x, 0, z + dz, tw, h * 0.72, tw, r.range(0, 6.28), r.range(-0.04, 0.04), r.range(-0.04, 0.04)))
     const cr = r.range(2.2, 3.8) * s
     for (let k = 0; k < 3; k++) { cn.push(mtx(x + r.range(-1.2, 1.2), h * (0.72 + k * 0.1), z + dz + r.range(-1.2, 1.2), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), r.range(0, 6))); col.setHSL(0.26 + r.range(-0.03, 0.04), 0.4, r.range(0.14, 0.26)); cc.push(col.clone()) }
-    if (opts.walk && nearestOnPoly(opts.trails[0].pts, x, z).d < (opts.trails[0].hw + 14)) opts.walk.circle(x, z + dz, tw * 1.05 + 0.1)
+    if (opts.walk && (opts.allTrees || nearestOnPoly(opts.trails[0].pts, x, z).d < (opts.trails[0].hw + 14))) opts.walk.circle(x, z + dz, tw * 1.05 + 0.1)
   }
   const wrap = opts.wrapZ
   for (let i = 0; i < N; i++) {
@@ -73,16 +73,16 @@ export function scatterForest(G, opts) {
 export function makePeepal(scale = 1) {
   const g = new THREE.Group(), r = new RNG(21)
   const bark = mat({ map: tex.barkLight(), color: 0xd8d0c4 }), leaf = mat({ map: tex.leaf(), color: 0xb8e08a })
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.15, 5.5, 12, 3), bark); trunk.position.y = 2.75; trunk.castShadow = true; g.add(trunk)
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.15, 5.5, 8, 2), bark); trunk.position.y = 2.75; trunk.castShadow = true; g.add(trunk)
   for (let i = 0; i < 7; i++) { const a = i / 7 * 6.28, b = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.6, 6), bark); b.position.set(Math.cos(a) * 1.0, 0.7, Math.sin(a) * 1.0); b.rotation.set(Math.sin(a) * 0.4, 0, -Math.cos(a) * 0.4); g.add(b) }
   const brs = []
   for (let i = 0; i < 6; i++) {
     const a = i / 6 * 6.28 + r.range(-0.3, 0.3), len = r.range(4, 6.4), br = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.38, len, 7), bark)
     br.position.set(Math.cos(a) * len * 0.35, 5.2 + len * 0.2, Math.sin(a) * len * 0.35); br.rotation.set(Math.sin(a) * 1.0, 0, -Math.cos(a) * 1.0); br.castShadow = true; g.add(br)
     const tipx = Math.cos(a) * len * 0.78, tipz = Math.sin(a) * len * 0.78
-    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r.range(2.1, 3.0), 2), leaf); b.position.set(tipx * r.range(0.8, 1.1) + r.range(-1, 1), 7.2 + len * 0.25 + r.range(-0.6, 1.0), tipz * r.range(0.8, 1.1) + r.range(-1, 1)); b.scale.y = 0.72; g.add(b) }
+    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r.range(2.1, 3.0), 1), leaf); b.position.set(tipx * r.range(0.8, 1.1) + r.range(-1, 1), 7.2 + len * 0.25 + r.range(-0.6, 1.0), tipz * r.range(0.8, 1.1) + r.range(-1, 1)); b.scale.y = 0.72; g.add(b) }
   }
-  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 2), leaf); crown.position.y = 9.2; crown.scale.y = 0.7; g.add(crown)
+  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(3.2, 1), leaf); crown.position.y = 9.2; crown.scale.y = 0.7; g.add(crown)
   // chabutra (stone platform) with sindoor-smeared stones, red thread, diya
   const plat = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.1, 0.45, 14), mat({ map: tex.stone('#9a968a') })); plat.position.y = 0.22; plat.receiveShadow = true; g.add(plat)
   for (let i = 0; i < 3; i++) { const s = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), mat({ color: '#a8321e' })); s.scale.y = 1.3; s.position.set(1.3 + i * 0.28, 0.58, -0.4 + i * 0.35); g.add(s) }
@@ -94,14 +94,14 @@ export function makePeepal(scale = 1) {
 export function makeBanyan(scale = 1) {
   const g = new THREE.Group(), r = new RNG(5)
   const bark = mat({ map: tex.bark(), color: 0xc8c0b0 }), leaf = mat({ map: tex.leaf(), color: 0xa8d078 })
-  const main = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.9, 6, 12, 3), bark); main.position.y = 3; g.add(main)
+  const main = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.9, 6, 8, 2), bark); main.position.y = 3; g.add(main)
   for (let i = 0; i < 9; i++) { const a = i / 9 * 6.28, len = r.range(6, 9), br = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.55, len, 7), bark); br.position.set(Math.cos(a) * len * 0.38, 6.2 + len * 0.15, Math.sin(a) * len * 0.38); br.rotation.set(Math.sin(a) * 1.2, 0, -Math.cos(a) * 1.2); g.add(br)
     const tx = Math.cos(a) * len * 0.82, tz = Math.sin(a) * len * 0.82
-    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r.range(2.6, 3.8), 2), leaf); b.position.set(tx + r.range(-1.5, 1.5), 8 + r.range(-0.5, 1.5), tz + r.range(-1.5, 1.5)); b.scale.y = 0.65; g.add(b) }
+    for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(r.range(2.6, 3.8), 1), leaf); b.position.set(tx + r.range(-1.5, 1.5), 8 + r.range(-0.5, 1.5), tz + r.range(-1.5, 1.5)); b.scale.y = 0.65; g.add(b) }
     // aerial roots (prop roots) hanging from branches, some reaching ground
     for (let k = 0; k < 6; k++) { const rl = k < 3 ? 7.3 : r.range(2.5, 5), rx = tx * r.range(0.4, 0.95) + r.range(-.6, .6), rz = tz * r.range(0.4, 0.95) + r.range(-.6, .6); const root = new THREE.Mesh(new THREE.CylinderGeometry(0.035 + (k < 3 ? 0.07 : 0), 0.05 + (k < 3 ? 0.08 : 0), rl, 5), bark); root.position.set(rx, k < 3 ? rl / 2 : 7.6 - rl / 2, rz); g.add(root) }
   }
-  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(4.2, 2), leaf); crown.position.y = 9.6; crown.scale.y = 0.6; g.add(crown)
+  const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(4.2, 1), leaf); crown.position.y = 9.6; crown.scale.y = 0.6; g.add(crown)
   g.scale.setScalar(scale); return g
 }
 
@@ -109,7 +109,7 @@ export function makeBambooClump(G, opts = {}) {
   const r = new RNG(opts.seed || 8), n = opts.n || 55, rad = opts.radius || 3.2, h0 = opts.h || 11
   const group = new THREE.Group(), culmM = mat({ map: tex.bamboo(), roughness: 0.55 }), leafM = new THREE.MeshStandardMaterial({ map: tex.bambooLeaf(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.9 })
   const sway = new THREE.Group(); group.add(sway)
-  const cul = new THREE.CylinderGeometry(0.045, 0.075, 1, 6, 6); cul.translate(0, 0.5, 0)
+  const cul = new THREE.CylinderGeometry(0.045, 0.075, 1, 5, 3); cul.translate(0, 0.5, 0)
   const culms = [], leaves = [], card = new THREE.PlaneGeometry(2.4, 2.4)
   for (let i = 0; i < n; i++) {
     const a = r.range(0, 6.28), d = Math.sqrt(r.next()) * rad, x = Math.cos(a) * d, z = Math.sin(a) * d, h = h0 * r.range(0.7, 1.15), lean = 0.04 + d / rad * 0.25
@@ -126,7 +126,7 @@ export function makeBambooClump(G, opts = {}) {
 export function makeSplitTree() {
   const g = new THREE.Group(), bark = mat({ map: tex.bark(), color: 0xd6cdbc }), leaf = mat({ map: tex.leaf(), color: 0xc0e098 })
   const a = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.55, 3.6, 8), bark); a.position.y = 1.8; g.add(a)
-  const mk = (s) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 6.5, 7), bark); b.position.set(s * 1.1, 6, 0); b.rotation.z = -s * 0.32; g.add(b); const c = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6, 2), leaf); c.position.set(s * 2.5, 9, 0); c.scale.y = 0.75; g.add(c); return b }
+  const mk = (s) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 6.5, 7), bark); b.position.set(s * 1.1, 6, 0); b.rotation.z = -s * 0.32; g.add(b); const c = new THREE.Mesh(new THREE.IcosahedronGeometry(2.6, 1), leaf); c.position.set(s * 2.5, 9, 0); c.scale.y = 0.75; g.add(c); return b }
   mk(-1); mk(1)
   // broken branch hanging by its bark (the unmistakable mark)
   const brk = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 2.2, 6), mat({ map: tex.barkLight() })); brk.position.set(-0.75, 3.35, 0.35); brk.rotation.set(0.15, 0, 2.5); g.add(brk)

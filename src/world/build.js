@@ -36,13 +36,13 @@ export class Level {
     const t = tex[texKey]().clone(); t.needsUpdate = true; t.repeat.set(w / rep, d / rep)
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), S({ map: t, color })); m.rotation.x = -Math.PI / 2; m.position.set(cx, 0, cz); m.receiveShadow = true; this.group.add(m); return m
   }
-  ribbon(pts, w, texKey = 'mud', rep = 4, y = 0.012, color = 0xffffff) {
+  ribbon(pts, w, texKey = 'mud', rep = 4, y = 0.012, color = 0xffffff, wobble = true) {
     const P = pts.map(p => (Array.isArray(p) ? { x: p[0], z: p[1] } : p)), pos = [], uv = [], idx = []; let acc = 0
     for (let i = 0; i < P.length; i++) {
       const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)]; let dx = b.x - a.x, dz = b.z - a.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l
       if (i > 0) acc += Math.hypot(P[i].x - P[i - 1].x, P[i].z - P[i - 1].z)
-      const nx = -dz, nz = dx, wob = 0.75 + 0.25 * Math.sin(i * 1.7)
-      pos.push(P[i].x + nx * w * wob, y, P[i].z + nz * w * wob, P[i].x - nx * w * wob, y, P[i].z - nz * w * wob); uv.push(0, acc / rep, 1, acc / rep)
+      const nx = -dz, nz = dx, wob = wobble ? 0.75 + 0.25 * Math.sin(i * 1.7) : 1, ww = typeof w === 'function' ? w(i, acc) : w
+      pos.push(P[i].x + nx * ww * wob, y, P[i].z + nz * ww * wob, P[i].x - nx * ww * wob, y, P[i].z - nz * ww * wob); uv.push(0, acc / rep, 1, acc / rep)
       if (i < P.length - 1) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2) }
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals()
@@ -131,7 +131,7 @@ export function buildHouse(L, o) {
 // ---------- furniture & props ----------
 const wood = () => S({ map: tex.wood('#6b4a30') })
 export function sofa() { const g = new THREE.Group(), m = S({ map: tex.cloth('#7a2e2a', '#a8544c', 'stripe') }); bx(g, 1.9, 0.4, 0.85, m, 0, 0.15, 0); bx(g, 1.9, 0.5, 0.2, m, 0, 0.5, -0.33); bx(g, 0.2, 0.3, 0.85, m, -0.95, 0.5, 0); bx(g, 0.2, 0.3, 0.85, m, 0.95, 0.5, 0); return g }
-export function table(w = 1.4, d = 0.8, h = 0.75) { const g = new THREE.Group(), m = wood(); bx(g, w, 0.06, d, m, 0, h - 0.06, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.06, h - 0.06, 0.06, m, sx * (w / 2 - 0.06), 0, sz * (d / 2 - 0.06)); return g }
+export function table(w = 1.4, d = 0.8, h = 0.75) { const g = new THREE.Group(), m = wood(); g.userData.table = { w, d, h }; bx(g, w, 0.06, d, m, 0, h - 0.06, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.06, h - 0.06, 0.06, m, sx * (w / 2 - 0.06), 0, sz * (d / 2 - 0.06)); return g }
 export function chair() { const g = new THREE.Group(), m = wood(); bx(g, 0.42, 0.05, 0.42, m, 0, 0.44, 0); bx(g, 0.42, 0.5, 0.04, m, 0, 0.5, -0.19); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.04, 0.44, 0.04, m, sx * 0.18, 0, sz * 0.18); return g }
 export function stool() { const g = new THREE.Group(); bx(g, 0.32, 0.04, 0.32, wood(), 0, 0.28, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.035, 0.28, 0.035, wood(), sx * 0.12, 0, sz * 0.12); return g }
 export function charpai() { const g = new THREE.Group(), m = wood(), rope = S({ map: tex.cloth('#6a5a3a', '#b8a070', 'check') }); bx(g, 1.0, 0.04, 1.9, m, 0, 0.38, 0); bx(g, 0.9, 0.02, 1.8, rope, 0, 0.4, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.07, 0.4, 0.07, m, sx * 0.47, 0, sz * 0.92); return g }
@@ -220,5 +220,43 @@ export function signboard(text, bg = '#1f5a34', fg = '#f2f0e0', w = 2.2, h = 1.0
 export function bush(s = 1) { const g = new THREE.Group(), m = S({ map: tex.leaf() }); for (let i = 0; i < 4; i++) sph(g, 0.4 * s, m, R.range(-0.4, 0.4) * s, 0.35 * s, R.range(-0.4, 0.4) * s, 1, 0.8, 1); return g }
 export function can() { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 12), new THREE.MeshStandardMaterial({ color: '#c0161c', metalness: 0.8, roughness: 0.3 })); g.add(m); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.033, 0.01, 12), new THREE.MeshStandardMaterial({ color: '#ccc', metalness: 0.9, roughness: 0.3 })); t.position.y = 0.06; g.add(t); return g }
 export function ball() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshStandardMaterial({ map: tex.cloth('#e8e8e0', '#2a60b0', 'print'), roughness: 0.6 })); m.castShadow = true; return m }
-export function helmetRack() { const g = new THREE.Group(); bx(g, 0.6, 0.05, 0.2, wood(), 0, 1.4, 0); for (const x of [-0.18, 0.18]) { const h = sph(g, 0.14, S({ color: x < 0 ? '#c02020' : '#202020', roughness: 0.3, metalness: 0.2 }), x, 1.55, 0.02, 1, 0.9, 1.1) } return g }
+export function helmetRack() { const g = new THREE.Group(); bx(g, 0.6, 0.05, 0.2, wood(), 0, 1.4, 0); g.userData.helmets = []; for (const x of [-0.18, 0.18]) { const h = sph(g, 0.14, S({ color: x < 0 ? '#c02020' : '#202020', roughness: 0.3, metalness: 0.2 }), x, 1.55, 0.02, 1, 0.9, 1.1); g.userData.helmets.push(h) } return g }
 export function ropeBridgeless() { return new THREE.Group() }
+
+// ---------- vehicles (forward = +z) ----------
+export function motorbike(color = '#a31d1d') {
+  const g = new THREE.Group(), body = S({ color, roughness: 0.35, metalness: 0.4 }), dark = S({ color: '#141414', roughness: 0.8 }), chrome = S({ color: '#b8bcc0', metalness: 0.9, roughness: 0.25 })
+  const lean = new THREE.Group(); g.add(lean)
+  for (const z of [-0.62, 0.62]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.07, 8, 18), dark); w.rotation.y = Math.PI / 2; w.position.set(0, 0.36, z); lean.add(w); const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.1, 10), chrome); hub.rotation.z = Math.PI / 2; hub.position.set(0, 0.36, z); lean.add(hub) }
+  bx(lean, 0.16, 0.12, 1.1, dark, 0, 0.42, 0)                       // frame
+  bx(lean, 0.22, 0.26, 0.5, body, 0, 0.7, 0.2)                      // tank
+  bx(lean, 0.2, 0.08, 0.6, S({ color: '#1a1a1a' }), 0, 0.8, -0.35)  // seat
+  bx(lean, 0.18, 0.3, 0.2, dark, 0, 0.35, 0)                         // engine block
+  const fork = bx(lean, 0.05, 0.62, 0.05, chrome, 0, 0.36, 0.62); fork.rotation.x = -0.25
+  bx(lean, 0.6, 0.03, 0.03, chrome, 0, 1.02, 0.5)                    // handlebar
+  const hl = sph(lean, 0.075, new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#ffe9b0', emissiveIntensity: 0.4 }), 0, 0.95, 0.66)
+  const pipe = bx(lean, 0.07, 0.07, 0.8, chrome, 0.16, 0.3, -0.25)
+  g.userData.lean = lean; lean.rotation.z = 0.16; lean.position.x = 0.1   // resting on its side stand
+  return g
+}
+export function carModel(color = '#c8c8c8') {
+  const g = new THREE.Group(), body = S({ color, roughness: 0.3, metalness: 0.5 }), glass = new THREE.MeshStandardMaterial({ color: '#0e1318', roughness: 0.1, metalness: 0.6 }), dark = S({ color: '#111' })
+  bx(g, 1.7, 0.55, 3.9, body, 0, 0.35, 0); bx(g, 1.5, 0.5, 2.0, glass, 0, 0.9, -0.2); bx(g, 1.46, 0.06, 1.9, body, 0, 1.4, -0.2)
+  for (const x of [-0.8, 0.8]) for (const z of [-1.25, 1.25]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.24, 12), dark); w.rotation.z = Math.PI / 2; w.position.set(x, 0.33, z); g.add(w) }
+  for (const x of [-0.6, 0.6]) { const h = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.05), new THREE.MeshBasicMaterial({ color: '#fff3c8' })); h.position.set(x, 0.65, 1.96); g.add(h); const t = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.05), new THREE.MeshBasicMaterial({ color: '#b01010' })); t.position.set(x, 0.65, -1.96); g.add(t) }
+  return g
+}
+
+// a plank with a nail: the scooter key hangs here (items.js handles taking it / hanging it back)
+export function keyHook() {
+  const g = new THREE.Group(), wd = new THREE.MeshStandardMaterial({ color: '#5a3d22', roughness: 1 }), iron = new THREE.MeshStandardMaterial({ color: '#8a8d92', metalness: 0.8, roughness: 0.4 })
+  const plank = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.1, 0.02), wd); g.add(plank)
+  const nail = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.07, 6), iron); nail.rotation.x = Math.PI / 2; nail.position.set(0, 0, 0.045); g.add(nail)
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.006, 8), iron); head.rotation.x = Math.PI / 2; head.position.set(0, 0, 0.08); g.add(head)
+  const key = new THREE.Group(); key.position.set(0, 0, 0.06)
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.003, 6, 12), iron); ring.position.y = 0.0; key.add(ring)
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.07, 0.004), iron); blade.position.y = -0.05; key.add(blade)
+  const bow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.01), new THREE.MeshStandardMaterial({ color: '#c0161c', roughness: 0.6 })); bow.position.y = -0.095; key.add(bow)
+  g.add(key); g.userData.hook = true; g.userData.keyMesh = key
+  return g
+}
