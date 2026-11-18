@@ -22,10 +22,24 @@ export async function ch1(s) {
   const eye = new THREE.Vector3(p0.pos.x, p0.eyeH, p0.pos.z), V3 = (x, y, z) => new THREE.Vector3(x, y, z)
   await startScene(0.2)
   ui.titleCard('THE LAST WAY OUT', 'Ek aam din', '10:15 AM · Sunday', 5.2)
+  // The opening shots and Mummy's dialogue are idle time with nothing to build:
+  // warm the next level modules in the background so later cuts are instant.
+  G.preload(['road', 'camp', 'bamboo'])
   try {
-    // wake up in the bedroom, beside the bed — per the definitive script's opening
-    await G.shot({ from: V3(-4.3, 1.55, -2.85), to: V3(-1.7, 1.35, -1.35), lookFrom: V3(-3.4, 0.75, -2.0), lookTo: V3(-0.6, 1.1, -1.2), dur: 2.6, fov: 48, fov1: 60 })
-    caption('[morning light through the thin curtain. You wake up on the bed — phone face-up at 74%. Nishant is sprawled across the room, scrolling]', 4.5)
+    // WAKE UP ON THE BED: eyes open at pillow height, the phone lit face-up a
+    // little way across the bed, morning light from the curtain. The old
+    // from-point sat ~0.3 m from the phone, so all you saw was a sliver of glass.
+    // Start further back and drift up/out into the room so the beat reads clearly.
+    const bedPos = L.refs.bedPos
+    const phoneP = H.local(-3.2, 0.72, -2.0)
+    await G.shot({
+      from: V3(bedPos.x - 0.75, bedPos.y + 0.42, bedPos.z - 0.62),
+      to: V3(bedPos.x + 0.95, bedPos.y + 0.62, bedPos.z + 0.7),
+      lookFrom: V3(phoneP.x, phoneP.y, phoneP.z),
+      lookTo: V3(-0.6, 1.15, -1.2), // open out into the room
+      dur: 3.2, fov: 54, fov1: 62, handheld: 0.12
+    })
+    caption('[morning light through the thin curtain. You wake up on the bed — phone face-up at 74%. Nishant is sprawled across the room, scrolling]', 4.8)
     await G.shot({ from: fanP.clone().add(V3(0.35, -0.55, 1.1)), to: H.local(1.0, 2.0, 2.2), lookFrom: fanP, lookTo: friend, dur: 4.2, fov: 52, fov1: 62 })
     await G.shot({ from: H.local(1.0, 2.0, 2.2), to: eye, lookFrom: friend, lookTo: V3(tbl.x, 0.9, tbl.z), dur: 3.4, fov: 62, fov1: G.cfg.fov || 70 })
   } finally { G.endShot(); p0.canMove = true; p0.canLook = true }
@@ -42,6 +56,7 @@ export async function ch1(s) {
   await say('Mummy', 'Helmet pehenna, dhyaan se chalana. Aur phone charged rakhna.', 'Wear your helmets, ride carefully. And keep your phone charged.')
   G.hasTiffin = true; ui.toast('Mummy ne biscuit ka tiffin diya [ic:tiffin] (I — inventory)', 3.4)
   await N('Theek hai.', 'Okay.')
+  G.preload(['village', 'night', 'escort'])
   mom.look(null); mom.face(null)
   // 2a. the phone lies on the kitchen table, the scooter key hangs on a nail by the wall (E at either; E at any table or hook leaves them again)
   items.stageHome(G, L.refs.homeTable.x, L.refs.homeTable.z)
@@ -58,6 +73,7 @@ export async function ch1(s) {
   rackHelmets().forEach(h => { h.visible = true })
   ui.objective('Phone (mez), chabi (hook) aur helmet (rack) le lo · Take your phone, key and helmets')
   ui.toast('E — phone, chabi, helmet uthao', 4)
+  G.preload(['shamshan', 'exit', 'tea', 'hospital'])
   c.mode = 'follow'; c.pose('stand')
   // stepping out without something: Mummy calls once, naming exactly what was forgotten
   await gate(() => !H.inside(G.player.pos.x, G.player.pos.z) && G.player.pos.z > 3.6, () => snapTo(0.6, 4.6), 0)

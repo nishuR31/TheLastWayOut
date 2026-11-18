@@ -1,5 +1,30 @@
 # BUGS / STATUS (honest)
 
+## FIXED — visual walkthrough bugs (2026-11-18, bedroom / opening scene)
+Reproduced live in a headless CDP walkthrough (`?dev=1`, real New Game + real key events).
+- **Trees growing inside the house**: `src/levels/road.js` `side()` returned the
+  fallback `{x:0,z:0}` (the exact centre of the bedroom) whenever a decoration
+  loop asked for a distance past the road's real length (~845.5 m) while the
+  loops run to `d<860`. A banyan (`varietyTree`) and crops landed at world origin,
+  its canopy clipping through the bed/ceiling. `side()` now clamps `d` to the
+  road length and returns a point along the final segment instead of the origin.
+  Verified after fix: 0 banyans / 0 props near the house.
+- **Traffic car parked in the bedroom**: `src/world/traffic.js` made a vehicle
+  visible during its initial `wait` while its position was still the default
+  (0,0,0) — a green car body filled the first-person view. Vehicles now carry a
+  `placed` flag; they are hidden until positioned on the road and hide again on
+  respawn. Verified after fix: no vehicle clipping in the house.
+- **"Wake up in bed" opening was a close-up of mattress/phone glass**: the shot
+  started ~0.3 m from the phone. `src/story/act1.js` now opens at pillow height
+  further back, looking at the lit phone before drifting out into the room, so
+  the beat reads as waking up. (Curtained window, tiffin and two helmets by the
+  bed are all in place from the previous pass.)
+- Speed-breaker/marking and wall/partition issues reported earlier were already
+  addressed (flat painted road lines; full-height interior partitions with a
+  proper lintel). No further geometry changes were needed.
+- Build: `npm run build` PASS (Vite 8, 2.06 s). Verified screenshots:
+  `shots/verify-01-room.png` after the fixes (clean bedroom, no tree/car).
+
 ## CURRENT STATUS (authoritative — this section supersedes the dated history below)
 - Build: `npm run build` passes on Vite 8. `npm audit`: **10 high advisories**, all from the unpatched upstream `picomatch` ReDoS (GHSA-fc5q-39xc-vjpf) via Vite 8 / electron-builder build tooling — dev-time only, not shipped, not reachable from gameplay. All earlier findings (critical tar, Electron, Vite server, minimatch) were fixed by pinning exact versions + `minimatch` override; no patched `picomatch` exists and npm's suggested Vite 6.2.7 downgrade just reintroduces older Vite advisories.
 - Voice: **265 Hinglish + 265 English** clips in `public/voice/{hi,en}` (the older "243/240" figure below is stale). Three silent manifest entries are intentional stage directions.

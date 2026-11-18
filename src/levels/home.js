@@ -1,7 +1,8 @@
 // Home + street. opts.night: Ending A homecoming (family is up, tiffin on the table)
 import * as THREE from 'three'
-import { Level, buildHouse, sofa, table, chair, stool, charpai, tvSet, shelf, matka, brassVessel, chulha, garlandedPhoto, fan, tubeLight, pole, wires, streetLight, autoRickshaw, cow, dogModel, helmetRack, keyHook, motorbike, bush, bed, bx, cyl, sph } from '../world/build.js'
+import { Level, buildHouse, sofa, table, chair, stool, charpai, tvSet, shelf, matka, chulha, garlandedPhoto, fan, tubeLight, pole, wires, streetLight, autoRickshaw, cow, dogModel, helmetRack, keyHook, motorbike, bush, bed, bx, cyl, sph } from '../world/build.js'
 import { makeTiffin, makeSteelGlass } from '../world/people.js'
+import { makePhone } from '../world/props.js'
 import { tex, withPBR } from '../world/textures.js'
 import { R } from '../core/util.js'
 import { makeTraffic } from '../world/traffic.js'
@@ -29,9 +30,31 @@ export function populateHome(G, L, night, o = {}) {
   house.place(garlandedPhoto(), -4.2, -1.0, 1.55, Math.PI / 2)
   // the bed you wake up in (final script: phone face-up on the bed, helmets by the door)
   const bedObj = bed(); house.place(bedObj, -3.5, -2.0, 0, 0); L.refs.bedPos = house.local(-2.9, 0.7, -2.0)
-  const phoneOnBed = new THREE.Group()
-  phoneOnBed.add(new THREE.Mesh(new THREE.BoxGeometry(0.076, 0.01, 0.158), new THREE.MeshStandardMaterial({ color: '#15181c', metalness: 0.4, roughness: 0.4 })))
-  house.place(phoneOnBed, -3.2, 0.72, -2.0)
+  const phoneOnBed = makePhone(); house.place(phoneOnBed, -3.2, 0.7, -2.0)
+  // The opening beat, from the script: "sunlight through a thin curtain", the
+  // phone face-up on the bed, and two helmets on a chair by the bed.
+  // A real window behind the curtain, with a warm pane and a frame.
+  const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.1), new THREE.MeshBasicMaterial({ color: '#ffe6b8' }))
+  pane.position.set(-3.5, 1.75, -3.09); pane.rotation.y = Math.PI; house.group.add(pane)
+  for (const [fw, fh, fx, fy] of [[1.62, 0.06, 0, 2.32], [1.62, 0.06, 0, 1.18], [0.06, 1.2, -0.78, 1.75], [0.06, 1.2, 0.78, 1.75], [0.04, 1.1, 0, 1.75]]) {
+    bx(house.group, fw, fh, 0.08, new THREE.MeshStandardMaterial({ color: '#7a6242' }), -3.5 + fx, fy, -3.1)
+  }
+  // Corrugated curtain: real folds cut into a subdivided plane.
+  const cg = new THREE.PlaneGeometry(1.55, 1.65, 20, 1), cp = cg.attributes.position
+  for (let i = 0; i < cp.count; i++) cp.setZ(i, 0.05 * Math.sin((cp.getX(i) + 0.775) * Math.PI * 7))
+  cg.computeVertexNormals()
+  const curtain = new THREE.Mesh(cg, new THREE.MeshStandardMaterial({ color: '#e8dcc0', roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }))
+  curtain.position.set(-3.5, 1.75, -2.98); curtain.rotation.y = Math.PI; house.group.add(curtain)
+  // A soft patch of morning sun on the floor, under the window.
+  const patch = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), new THREE.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.16, depthWrite: false }))
+  patch.rotation.x = -Math.PI / 2; patch.position.set(-3.4, 0.02, -1.55); house.group.add(patch)
+  const bedChair = chair(); bedChair.scale.setScalar(1.25); house.place(bedChair, -2.1, -2.5, 0, 0.3)
+  for (const [i, col] of ['#a31d1d', '#222'].entries()) {
+    const helmet = new THREE.Group()
+    sph(helmet, 0.16, new THREE.MeshStandardMaterial({ color: col, roughness: 0.5 }), 0, 0, 0, 1, 0.75, 1)
+    helmet.position.set(i ? 0.16 : -0.16, 0.5, 0); bedChair.add(helmet)
+  }
+  const sideTable = table(0.5, 0.4, 0.5); house.place(sideTable, -4.1, -1.6, 0, 0)
   // kitchen corner
   house.place(chulha(), -4.0, 0.1, 0, 0)
   house.place(table(1.3, 0.7, 0.8), -2.9, 0.4, 0, 0)
@@ -46,18 +69,20 @@ export function populateHome(G, L, night, o = {}) {
   L.refs.homeTable = house.local(2.4, 0.75, -0.8)
   L.refs.tiffinPos = house.local(-2.9, 0.9, 0.4)
   L.refs.tiffin = tiffin
-  // interior partitions: a kitchen wall and a small back bedroom, with wide gaps to walk through
+  // Interior partitions that read as REAL walls: full height, flush with the
+  // outer walls, and joined by a lintel so the gap is a doorway, not a floating
+  // waist-high slab. The bed stays in the back-left bedroom.
   {
     const pw = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#dccba6') }))
-    const div = (lx0, lz0, lx1, lz1, hh = 1.3) => {
-      const ww = Math.max(0.14, Math.abs(lx1 - lx0)), dd = Math.max(0.14, Math.abs(lz1 - lz0))
-      bx(house.group, ww, hh, dd, pw, (lx0 + lx1) / 2, hh / 2, (lz0 + lz1) / 2)
+    const wall = (lx0, lz0, lx1, lz1, hh, y) => {
+      const ww = Math.max(0.12, Math.abs(lx1 - lx0)), dd = Math.max(0.12, Math.abs(lz1 - lz0))
+      bx(house.group, ww, hh, dd, pw, (lx0 + lx1) / 2, y, (lz0 + lz1) / 2)
     }
-    div(-4.35, -1.15, -1.7, -1.15)   // kitchen / living divider
-    div(0.95, -1.15, 4.35, -1.15)    // bedroom front
-    div(1.15, -2.9, 1.15, -1.85)     // bedroom side
-    // a second small room divider on the left
-    div(-2.2, -2.9, -2.2, -2.0, 1.1)
+    // Waist-high partitions, like a real Indian home's half-wall / counter —
+    // they divide the rooms without hiding the bed from the doorway.
+    wall(-4.45, -1.15, -1.30, -1.15, 1.25, 0.625)
+    wall(1.20, -1.15, 4.45, -1.15, 1.25, 0.625)
+    wall(-4.45, 1.6, -2.6, 1.6, 0.95, 0.475)
   }
   // yard
   const ch = charpai(); ch.position.set(-4.5, 0, 7.6); ch.rotation.y = 0.2; L.add(ch)
@@ -108,7 +133,8 @@ export function populateHome(G, L, night, o = {}) {
   const dg = dogModel(); dg.position.set(2, 0, 17.3); dg.rotation.y = 2; L.add(dg)
   // trees
   const tr = (x, z, s = 1) => { const g = new THREE.Group(); const t = cyl(g, 0.22 * s, 0.32 * s, 4 * s, withPBR(new THREE.MeshStandardMaterial({ map: tex.bark() })), 0, 0, 0, 8); for (let i = 0; i < 3; i++) sph(g, 1.8 * s, new THREE.MeshStandardMaterial({ map: tex.leaf(), color: '#7aa860' }), R.range(-0.8, 0.8), 4.4 * s + i * 0.5, R.range(-0.8, 0.8)); g.position.set(x, 0, z); L.add(g); L.walk.circle(x, z, 0.35 * s) }
-  tr(-6, 9.5, 1.1); tr(9, 8.4, 1.2); tr(30, 19, 1.3); tr(-30, 19, 1.2); tr(40, 10, 1.1); tr(55, 18.5, 1.3); tr(65, 10, 1.2)
+  // Keep the view from the gate to the front door and the bed completely clear.
+  tr(-22, 10, 1.1); tr(24, 8.4, 1.2); tr(30, 19, 1.3); tr(-30, 19, 1.2); tr(40, 10, 1.1); tr(55, 18.5, 1.3); tr(65, 10, 1.2)
   if (!night) {
     // chacha on the veranda, working on his bike
     const bk = motorbike('#a31d1d'); bk.position.set(2.6, 0, 6.4); bk.rotation.y = Math.PI / 2; L.add(bk); L.walk.circle(2.0, 6.4, 0.55); L.walk.circle(3.2, 6.4, 0.55)

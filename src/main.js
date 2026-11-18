@@ -18,10 +18,11 @@ import { fmtClock } from './core/util.js'
 import { charPreview } from './core/charpreview.js'
 import { icons, iconTag as icon } from './core/icons.js'
 import { keyaid } from './core/keyaid.js'
+import { mouseCtl } from './core/mouse.js'
 
 const $ = (id) => document.getElementById(id)
 const SKEY = 'tlwo_settings_v1'
-const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1, playerChar: 'Nishan', keyaid: 'context' }
+const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, mouselook: 'auto', subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1, playerChar: 'Nishan', keyaid: 'context' }
 let S = { ...defaults, ...(() => { try { return JSON.parse(localStorage.getItem(SKEY) || '{}') } catch (e) { return {} } })() }
 let inGame = false, screenStack = [], pausedNow = false
 
@@ -31,14 +32,15 @@ function showScreen(id) {
   SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id))
   ui.show('hud', false) // keep the compass/HUD from bleeding through translucent screens
   screenStack.push(id)
+  G._pausedDirty = true // render the frozen scene once, then idle until unpaused
 }
-function hideScreens() { SCREENS.forEach(s => $(s).classList.add('hidden')); ui.show('hud', true); screenStack = [] }
+function hideScreens() { SCREENS.forEach(s => $(s).classList.add('hidden')); ui.show('hud', true); screenStack = []; G._pausedDirty = true }
 let backTo = 'menu', charFromMenu = false
 
 // ---------- settings ----------
 function applySettings() {
   audio.vol.master = +S.master; audio.vol.voice = +S.voice; audio.vol.amb = +S.amb; audio.vol.sfx = +S.sfx; audio.applyVolumes()
-  input.sens = +S.sens; ui.subMode = S.subs; ui.caps = !!S.caps; ui.voiceLang = S.vlang
+  input.sens = +S.sens; input.mouseMode = S.mouselook || 'auto'; if (input.mouseMode !== 'auto') input.unlock(); document.body.classList.toggle('right-look', input.mouseMode === 'right'); ui.subMode = S.subs; ui.caps = !!S.caps; ui.voiceLang = S.vlang
   ui.playerChar = S.playerChar === 'Nishant' ? 'Nishant' : 'Nishan'
   document.querySelectorAll('.cs-card').forEach(c => c.classList.toggle('selected', c.dataset.char === ui.playerChar))
   if (charPreview.select) charPreview.select(ui.playerChar)
@@ -51,7 +53,7 @@ function applySettings() {
   localStorage.setItem(SKEY, JSON.stringify(S))
 }
 function bindSettings() {
-  const map = { 's-master': 'master', 's-voice': 'voice', 's-amb': 'amb', 's-sfx': 'sfx', 's-sens': 'sens', 's-subs': 'subs', 's-caps': 'caps', 's-gfx': 'gfx', 's-shake': 'shake', 's-flash': 'flash', 's-vlang': 'vlang', 's-nav': 'nav', 's-fov': 'fov', 's-subsz': 'subsz', 's-keyaid': 'keyaid' }
+  const map = { 's-master': 'master', 's-voice': 'voice', 's-amb': 'amb', 's-sfx': 'sfx', 's-sens': 'sens', 's-mouselook': 'mouselook', 's-subs': 'subs', 's-caps': 'caps', 's-gfx': 'gfx', 's-shake': 'shake', 's-flash': 'flash', 's-vlang': 'vlang', 's-nav': 'nav', 's-fov': 'fov', 's-subsz': 'subsz', 's-keyaid': 'keyaid' }
   for (const [id, k] of Object.entries(map)) {
     const el = $(id); if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k]
     el.addEventListener('input', () => { S[k] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : +el.value); applySettings() })
@@ -254,12 +256,14 @@ async function startGame(chIdx = 0) {
 }
 function toMenu() {
   phone.close(); invOpen = false
-  mapOpen = false; document.body.classList.remove('map-open'); stopStory(); inGame = false; pausedNow = false; G.paused = false; input.enabled = false; input.unlock()
+  $('loading').classList.add('hidden'); G.loadingVisible = false
+  mapOpen = false; document.body.classList.remove('map-open'); stopStory(); inGame = false; pausedNow = false; G.paused = true; input.enabled = false; input.unlock()
   ui.show('hud', false); ui.fadeInstant(1); if (audio.ctx) { audio.ctx.resume(); audio.st.engine = 0 }
   renderReport(null); backTo = 'menu'; showScreen('menu'); $('m-quit').classList.toggle('hidden', !window.electronAPI)
 }
 function showEnd(title, sub) {
-  inGame = false; input.enabled = false; input.unlock()
+  inGame = false; G.paused = true; input.enabled = false; input.unlock()
+  $('loading').classList.add('hidden'); G.loadingVisible = false
   $('end-title').textContent = title; $('end-sub').textContent = sub; ui.fadeInstant(1); showScreen('endcard')
 }
 
@@ -305,7 +309,7 @@ function wire() {
 
 // ---------- boot ----------
 try {
-  G.init($('c')); ui.init(); input.init($('c'), { onPause: pauseGame }); keyaid.init(); bindSettings(); applySettings(); wire(); tips.init()
+  G.init($('c')); ui.init(); input.init($('c'), { onPause: pauseGame }); keyaid.init(); mouseCtl.init(); bindSettings(); applySettings(); wire(); tips.init()
   charPreview.init($('char-preview'))
   window.__charPreview = charPreview
 } catch (err) {

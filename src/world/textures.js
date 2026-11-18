@@ -23,6 +23,20 @@ const hex = (s) => { const n = parseInt(s.replace('#', ''), 16); return [(n >> 1
 function once(key, f) { return cache[key] || (cache[key] = f()) }
 
 export const tex = {
+  // A cheap sky/ground environment so metals and glass have something to
+  // reflect. Three auto-PMREMs this when assigned to scene.environment.
+  envMap: () => once('envmap', () => {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128
+    const x = c.getContext('2d')
+    const g = x.createLinearGradient(0, 0, 0, 128)
+    g.addColorStop(0, '#aebfd2'); g.addColorStop(0.42, '#8795a3'); g.addColorStop(0.52, '#6b6553'); g.addColorStop(1, '#1b1916')
+    x.fillStyle = g; x.fillRect(0, 0, 256, 128)
+    const s = x.createRadialGradient(178, 38, 2, 178, 38, 54)
+    s.addColorStop(0, 'rgba(255,244,214,0.95)'); s.addColorStop(1, 'rgba(255,244,214,0)')
+    x.fillStyle = s; x.fillRect(0, 0, 256, 90)
+    const t = new THREE.CanvasTexture(c); t.mapping = THREE.EquirectangularReflectionMapping
+    t.colorSpace = THREE.SRGBColorSpace; return t
+  }),
   grass: () => once('grass', () => toTex(pixel(256, 256, (u, v) => {
     const n = pfbm(u * 8, v * 8, 8, 4), m = pfbm(u * 32, v * 32, 32, 2)
     const c = mix([38, 52, 24], [88, 98, 44], n)

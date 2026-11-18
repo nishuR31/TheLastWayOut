@@ -150,14 +150,51 @@ export function table(w = 1.4, d = 0.8, h = 0.75) { const g = new THREE.Group(),
 export function chair() { const g = new THREE.Group(), m = wood(); bx(g, 0.42, 0.05, 0.42, m, 0, 0.44, 0); bx(g, 0.42, 0.5, 0.04, m, 0, 0.5, -0.19); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.04, 0.44, 0.04, m, sx * 0.18, 0, sz * 0.18); return g }
 export function stool() { const g = new THREE.Group(); bx(g, 0.32, 0.04, 0.32, wood(), 0, 0.28, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.035, 0.28, 0.035, wood(), sx * 0.12, 0, sz * 0.12); return g }
 export function charpai() { const g = new THREE.Group(), m = wood(), rope = S({ map: tex.cloth('#6a5a3a', '#b8a070', 'check') }); bx(g, 1.0, 0.04, 1.9, m, 0, 0.38, 0); bx(g, 0.9, 0.02, 1.8, rope, 0, 0.4, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.07, 0.4, 0.07, m, sx * 0.47, 0, sz * 0.92); return g }
-export function bed() { const g = new THREE.Group(); bx(g, 1.5, 0.35, 2.0, wood(), 0, 0, 0); bx(g, 1.4, 0.2, 1.9, S({ map: tex.cloth('#3a5a7a', '#9ab', 'check') }), 0, 0.35, 0); bx(g, 0.5, 0.12, 0.3, S({ color: '#e8e0d0' }), 0, 0.55, -0.8); return g }
+export function bed() {
+  const g = new THREE.Group()
+  bx(g, 1.5, 0.35, 2.0, wood(), 0, 0, 0)
+  bx(g, 1.6, 0.7, 0.1, wood(), 0, 0.35, -1.02) // headboard
+  // A sheet with real wrinkles, not a flat box — this is the wake-up bed.
+  const sh = new THREE.PlaneGeometry(1.4, 1.9, 12, 16)
+  const p = sh.attributes.position
+  for (let i = 0; i < p.count; i++) p.setZ(i, 0.018 * Math.sin(p.getX(i) * 9 + p.getY(i) * 3) + 0.01 * Math.sin(p.getY(i) * 11))
+  sh.computeVertexNormals()
+  const sheet = new THREE.Mesh(sh, S({ map: tex.cloth('#3a5a7a', '#9ab', 'check'), side: THREE.DoubleSide }))
+  sheet.rotation.x = -Math.PI / 2; sheet.position.y = 0.455; g.add(sheet)
+  // folded quilt over the lower half with a rolled lip at the fold
+  const quilt = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 0.95, 8, 8), S({ map: tex.cloth('#8c5a4a', '#d8b89a', 'stripe'), side: THREE.DoubleSide }))
+  quilt.rotation.x = -Math.PI / 2; quilt.position.set(0, 0.475, 0.48); g.add(quilt)
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.42, 8), S({ color: '#a8765a' }))
+  lip.rotation.z = Math.PI / 2; lip.position.set(0, 0.49, 0.0); g.add(lip)
+  // pillow: squashed sphere with a seam
+  const pillow = sph(g, 0.25, S({ color: '#e8e0d0', roughness: 1 }), 0, 0.6, -0.75, 1.45, 0.32, 0.9)
+  pillow.castShadow = true
+  return g
+}
 export function fan(L, parent, x, y, z) { const g = new THREE.Group(); g.position.set(x, y, z); const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 10), S({ color: '#ddd' })); g.add(hub); const blades = new THREE.Group(); for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.012, 0.13), S({ color: '#e8e4d8' })); b.position.x = 0.38; const p = new THREE.Group(); p.rotation.y = i * 2.094; p.add(b); blades.add(p) } g.add(blades); const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.25, 6), S({ color: '#444' })); rod.position.y = 0.15; g.add(rod); parent.add(g); L.updaters.push((dt) => { blades.rotation.y += dt * 9 }); return g }
 export function tubeLight(L, parent, x, y, z, ry = 0) { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.03, 0.06), new THREE.MeshBasicMaterial({ color: '#f4f7ff' })); g.add(m); g.position.set(x, y, z); g.rotation.y = ry; parent.add(g); return g }
 export function tvSet(on = false) { const g = new THREE.Group(); bx(g, 1.3, 0.55, 0.06, S({ color: '#111' }), 0, 0.0, 0); const scr = bx(g, 1.22, 0.47, 0.01, new THREE.MeshBasicMaterial({ color: on ? '#587a96' : '#080a0c' }), 0, 0.04, 0.035); g.userData.screen = scr; return g }
 export function shelf() { const g = new THREE.Group(), m = wood(); bx(g, 1.1, 1.7, 0.35, m, 0, 0, 0); for (let i = 0; i < 4; i++) bx(g, 1.0, 0.03, 0.3, S({ color: '#2a1a10' }), 0, 0.28 + i * 0.4, 0.03); const cols = ['#9a3a2a', '#2a5a7a', '#c0a030', '#3a6a3a']; for (let i = 0; i < 12; i++) bx(g, 0.07, 0.25, 0.2, S({ color: cols[i % 4] }), -0.42 + (i % 6) * 0.14, 0.31 + Math.floor(i / 6) * 0.4, 0.14); return g }
 export function matka() { const g = new THREE.Group(), m = S({ color: '#a8552e', roughness: 1 }); sph(g, 0.22, m, 0, 0.24, 0, 1, 1.05, 1); cyl(g, 0.12, 0.17, 0.12, m, 0, 0.42, 0); return g }
 export function brassVessel(s = 1) { const g = new THREE.Group(), m = S({ color: '#c8a038', metalness: 0.85, roughness: 0.3 }); cyl(g, 0.1 * s, 0.14 * s, 0.2 * s, m, 0, 0, 0); cyl(g, 0.12 * s, 0.1 * s, 0.05 * s, m, 0, 0.2 * s, 0); return g }
-export function chulha() { const g = new THREE.Group(), m = S({ map: tex.mudwall() }); bx(g, 0.7, 0.28, 0.5, m, 0, 0, 0); bx(g, 0.5, 0.06, 0.04, S({ color: '#111' }), 0, 0.28, 0); const em = new THREE.Mesh(new THREE.CircleGeometry(0.1, 10), new THREE.MeshBasicMaterial({ color: '#ff6a20' })); em.position.set(0, 0.14, 0.255); g.add(em); const pot = brassVessel(1.3); pot.position.set(0, 0.3, 0); g.add(pot); return g }
+export function chulha() {
+  const g = new THREE.Group(), m = S({ map: tex.mudwall() })
+  bx(g, 0.7, 0.28, 0.5, m, 0, 0, 0)
+  bx(g, 0.5, 0.06, 0.04, S({ color: '#111' }), 0, 0.28, 0)
+  const em = new THREE.Mesh(new THREE.CircleGeometry(0.1, 10), new THREE.MeshBasicMaterial({ color: '#ff6a20' }))
+  em.position.set(0, 0.14, 0.255); g.add(em)
+  // small live flames instead of a flat orange sticker
+  for (let i = 0; i < 4; i++) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.035 - i * 0.005, 0.14 - i * 0.02, 6),
+      new THREE.MeshBasicMaterial({ color: i < 2 ? '#ff7a1c' : '#ffd06a', transparent: true, opacity: 0.9 }))
+    f.position.set((i - 1.5) * 0.03, 0.16, 0.26); f.userData.phase = i * 1.7
+    f.onBeforeRender = () => { const t = performance.now() * 0.005; f.scale.setScalar(0.85 + 0.15 * Math.sin(t + f.userData.phase)) }
+    g.add(f)
+  }
+  const glow = new THREE.PointLight('#ff9a46', 2.2, 3.2); glow.position.set(0, 0.3, 0.18); g.add(glow)
+  const pot = brassVessel(1.3); pot.position.set(0, 0.3, 0); g.add(pot)
+  return g
+}
 export function garlandedPhoto() { const g = new THREE.Group(); const fr = bx(g, 0.36, 0.46, 0.03, S({ color: '#2a1a10' }), 0, 0, 0); const ph = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.38), new THREE.MeshStandardMaterial({ map: tex.photoWoman(), roughness: 0.6 })); ph.position.set(0, 0.23, 0.02); g.add(ph); const gar = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.03, 6, 14, Math.PI), S({ color: '#e08a1a' })); gar.position.set(0, 0.34, 0.03); gar.rotation.z = Math.PI; g.add(gar); return g }
 export function pole(L, x, z, h = 8) { const g = new THREE.Group(); cyl(g, 0.1, 0.14, h, S({ map: tex.cement() }), 0, 0, 0, 8); bx(g, 1.6, 0.08, 0.08, S({ color: '#333' }), 0, h - 0.4, 0); g.position.set(x, 0, z); L.add(g); return g }
 export function wires(L, a, b, sag = 0.5) { const pts = []; for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(new THREE.Vector3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t - Math.sin(t * Math.PI) * sag, a.z + (b.z - a.z) * t)) } const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#111' })); L.add(l) }

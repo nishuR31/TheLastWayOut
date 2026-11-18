@@ -1,6 +1,7 @@
 // Chapter 7-8: the "village". Looks ordinary: mud + brick houses, lantern light, no wires, no poles. The uncle's house is at the end of the lane.
 import * as THREE from 'three'
-import { Level, buildHouse, charpai, table, stool, matka, brassVessel, chulha, garlandedPhoto, bush, cyl, bx, sph, diya, wires } from '../world/build.js'
+import { Level, buildHouse, charpai, table, matka, brassVessel, chulha, garlandedPhoto, cyl, bx, sph, wires, cow } from '../world/build.js'
+import { vehicle } from '../world/variety.js'
 import { makeSteelGlass, makeGlass } from '../world/people.js'
 import { smoothPts, nightTick } from '../world/common.js'
 import { scatterForest, makeBanyan } from '../world/nature.js'
@@ -17,7 +18,6 @@ export function build(G, opts = {}) {
   L.ribbon(lane, 2.4, 'mud', 4, 0.012, 0xb0a890); L.walk.corridor(lane, 3.0, 'lane'); L.lanePts = lane
   L.walk.rect(-3.5, 56, 3.5, 66, 'porch')
   L.surface = () => 'mud'
-  L.add(scatterForest(G, { bounds: [-90, -40, 90, 120], trails: [{ pts: lane, hw: 3.0 }], avoid: [{ x: 0, z: 40, r: 22 }], density: 0.02, seed: 61, walk: L.walk, allTrees: true, mode: 'natural', level: L }))
   L.walk.bound = { x0: -80, z0: -34, x1: 80, z1: 108 }
   L.walk.free = true; L.core = [lane]; L.roam = { stray: 44, pits: 6, seed: 61 }   // free roam round the village too
   const mk = (x, z, rot, w, d, col, roof, wall, pale = false, lit = false) => {
@@ -41,11 +41,18 @@ export function build(G, opts = {}) {
     [8.7, 54, -Math.PI / 2, 6, 4.5, '#c2b193', 'thatch', 'brick', false, false]
   ]
   for (const h of houses) mk(...h)
+  // Trees must never grow through a house, the well, the banyan or the lane.
+  const noTrees = [
+    { x: 0, z: 40, r: 22 }, { x: 0, z: 64, r: 9 }, { x: 4.6, z: 35, r: 3 }, { x: -4.8, z: 39, r: 3 },
+    ...houses.map(([x, z, , w, d]) => ({ x, z, r: Math.max(w, d) * 0.75 + 2 }))
+  ]
+  L.add(scatterForest(G, { bounds: [-90, -40, 90, 120], trails: [{ pts: lane, hw: 3.0 }], avoid: noTrees, density: 0.02, seed: 61, walk: L.walk, allTrees: true, mode: 'natural', level: L }))
   // Only this one house ever answers a knock; the lit window is a true clue.
   L.answerHouse = L.doorHouses[1]
   L.refs.answerDoor = L.answerHouse.doorWorld.clone()
-  // a lantern by every door (no poles, no wires) — one of them is lit
-  for (const hs of L.doorHouses) L.lantern(hs.doorWorld.x, 1.9, hs.doorWorld.z, { dist: 8, int: 4, glow: 1.3 })
+  // a lantern by every door (no poles, no wires) — only a few carry real lights,
+  // the rest are emissive props, so the village does not need a dozen point lights
+  L.doorHouses.forEach((hs, i) => L.lantern(hs.doorWorld.x, 1.9, hs.doorWorld.z, { dist: 8, int: 4, glow: 1.3, light: i % 4 === 0 }))
   // white eyes in the windows: seen from the corner of your eye, gone the moment you look straight at them
   const eyes = []; L.group.traverse(o => { if (o.userData && o.userData.pale) { o.material = o.material.clone(); o.material.opacity = 0.9; eyes.push({ m: o, t: R.range(0, 4), gone: 0 }) } })
   L.eyes = eyes
@@ -67,7 +74,13 @@ export function build(G, opts = {}) {
   const gy = (x, z) => (L.groundY ? L.groundY(x, z) : 0)
   const wx = 4.6, wz = 35
   const stoneM = new THREE.MeshStandardMaterial({ map: tex.stone('#8a8578'), roughness: 1 })
-  const well = cyl(L.group, 1.15, 1.25, 0.9, stoneM, wx, gy(wx, wz) + 0.45, wz, 16)
+  // An OPEN well: a dark shaft and water at the bottom, not a solid stone drum.
+  const well = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.25, 0.9, 16, 1, true), stoneM)
+  well.position.set(wx, gy(wx, wz) + 0.45, wz); L.group.add(well)
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.85, 16, 1, true), new THREE.MeshStandardMaterial({ color: '#0c0f0e', side: THREE.DoubleSide, roughness: 1 }))
+  shaft.position.set(wx, gy(wx, wz) + 0.45, wz); L.group.add(shaft)
+  const water = new THREE.Mesh(new THREE.CircleGeometry(1.02, 20), new THREE.MeshStandardMaterial({ color: '#26333a', roughness: 0.08, metalness: 0.5 }))
+  water.rotation.x = -Math.PI / 2; water.position.set(wx, gy(wx, wz) + 0.2, wz); L.group.add(water)
   const rim = new THREE.Mesh(new THREE.TorusGeometry(1.18, 0.11, 6, 18), stoneM)
   rim.rotation.x = Math.PI / 2; rim.position.set(wx, gy(wx, wz) + 0.92, wz); L.group.add(rim)
   const woodM = new THREE.MeshStandardMaterial({ color: '#6b4a2c', roughness: 1 })
@@ -81,12 +94,21 @@ export function build(G, opts = {}) {
   const banyan = makeBanyan(0.9); banyan.position.set(bxz, gy(bxz, bzz), bzz); L.add(banyan)
   L.walk.circle(bxz, bzz, 1.4); L.refs.banyan = new THREE.Vector3(bxz, gy(bxz, bzz), bzz)
   // short, crooked picket fences along the lane edges (no poles or wires)
+  // One instanced mesh for all pickets instead of ~80 separate draw calls.
   const fence = new THREE.MeshStandardMaterial({ color: '#7c6444', roughness: 1 })
+  const picks = []
   for (const side of [-1, 1]) for (let z = 4; z <= 58; z += 1.35) {
     if (Math.abs(z - 35) < 6) continue // leave the well / banyan clearing open
-    const x = side * 3.4 + (R.next() - 0.5) * 0.3
-    const pk = bx(L.group, 0.1, 0.85 - (z % 3) * 0.12, 0.09, fence, x, gy(x, z) + 0.42, z)
-    pk.rotation.z = (R.next() - 0.5) * 0.5
+    const x = side * 3.4 + (R.next() - 0.5) * 0.3, h = 0.85 - (z % 3) * 0.12
+    picks.push(new THREE.Matrix4().compose(
+      new THREE.Vector3(x, gy(x, z) + h / 2, z),
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, (R.next() - 0.5) * 0.5)),
+      new THREE.Vector3(0.1, h, 0.09)
+    ))
+  }
+  if (picks.length) {
+    const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), fence, picks.length)
+    picks.forEach((m, i) => inst.setMatrixAt(i, m)); inst.instanceMatrix.needsUpdate = true; L.group.add(inst)
   }
   // wet laundry on a rope between two houses — swaying though there is no wind
   wires(L, { x: -6.4, y: 2.2, z: 15 }, { x: -6.4, y: 2.2, z: 21 }, 0.35)
@@ -100,6 +122,16 @@ export function build(G, opts = {}) {
   for (const [x, z] of [[-5.2, 12], [5.6, 29], [-5.4, 47]]) {
     const ch = charpai(); const y = gy(x, z); ch.position.set(x, y, z); ch.rotation.y = R.range(0, 3); L.add(ch); L.walk.circle(x, z, 0.9)
   }
+  // everyday village clutter: cycles at doors, pots, a tethered cow, hay
+  for (const [x, z, ry] of [[-6.2, 27, 1.1], [6.3, 49, -0.6]]) {
+    const cycle = vehicle({ kind: 'cycle', color: '#3a4a52' }); cycle.position.set(x, gy(x, z), z); cycle.rotation.y = ry; L.add(cycle)
+  }
+  for (const [x, z] of [[-6.4, 8], [6.5, 19], [-6.3, 44], [6.4, 55]]) {
+    const pot = matka(); pot.position.set(x, gy(x, z), z); pot.scale.setScalar(0.75); L.add(pot)
+  }
+  const cowObj = cow(); cowObj.position.set(-9.5, gy(-9.5, 37), 37); cowObj.rotation.y = 1.2; L.add(cowObj)
+  const hay = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.5, 8), new THREE.MeshStandardMaterial({ map: tex.thatch(), roughness: 1 }))
+  hay.position.set(6.8, gy(6.8, 37) + 0.75, 37); L.add(hay); L.walk.circle(6.8, 37, 0.8)
   // uncle's house
   const H = buildHouse(L, { x: 0, z: 64, w: 7.5, d: 5.5, h: 2.8, rot: Math.PI, wall: 'mud', col: '#b9a78a', roof: 'tile', floor: 'earth', doorX: 0, doorW: 1.0, closedDoor: true, name: 'uncle', windows: [{ side: 's', x: -2.3, y: 1.2, w: 0.7, h: 0.8, color: '#a8742e' }, { side: 's', x: 2.3, y: 1.2, w: 0.7, h: 0.8, color: '#a8742e' }] })
   L.house = H

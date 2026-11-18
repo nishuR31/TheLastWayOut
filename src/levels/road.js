@@ -30,8 +30,12 @@ export function build(G, opts = {}) {
   L.ribbon(pts.map(p => ({ x: p.x, z: p.z - 0.02 })), (i) => hwAt(cum[i]) + 1.5, 'mud', 4, 0.006, 0xffffff, false)
   // lane markings: centre (double yellow in the 4-lane stretch, dashed otherwise), lane dashes, solid edge lines
   const mark = (offFn, d0, d1, step, segLen, color, wdt = 0.16) => {
-    const n = Math.max(1, Math.floor((d1 - d0) / step)), im = new THREE.InstancedMesh(new THREE.BoxGeometry(wdt, 0.012, segLen), new THREE.MeshBasicMaterial({ color }), n), m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), p4 = new THREE.Vector3(), s4 = new THREE.Vector3(1, 1, 1); let c = 0
-    for (let d = d0; d < d1 && c < n; d += step) { const a2 = ptAt(pts, d), off = offFn(d); e4.set(0, a2.yaw, 0); q4.setFromEuler(e4); p4.set(a2.x - Math.cos(a2.yaw) * off, 0.022, a2.z + Math.sin(a2.yaw) * off); im.setMatrixAt(c++, m4.compose(p4, q4, s4)) }
+    // Flat painted lines, not raised boxes — a 3D box reads as a speed breaker.
+    const n = Math.max(1, Math.floor((d1 - d0) / step)), geo = new THREE.PlaneGeometry(wdt, segLen)
+    geo.rotateX(-Math.PI / 2)
+    const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthWrite: false }), n)
+    const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), p4 = new THREE.Vector3(), s4 = new THREE.Vector3(1, 1, 1); let c = 0
+    for (let d = d0; d < d1 && c < n; d += step) { const a2 = ptAt(pts, d), off = offFn(d); e4.set(0, a2.yaw, 0); q4.setFromEuler(e4); p4.set(a2.x - Math.cos(a2.yaw) * off, 0.014, a2.z + Math.sin(a2.yaw) * off); im.setMatrixAt(c++, m4.compose(p4, q4, s4)) }
     im.count = c; im.instanceMatrix.needsUpdate = true; im.frustumCulled = false; L.add(im)
   }
   mark(() => 0, 3, 200, 7, 2.4, '#e8e2c8'); mark(() => 0, 440, len - 3, 8, 2.6, '#e8e2c8')            // dashed centre, 2-lane roads
@@ -47,9 +51,15 @@ export function build(G, opts = {}) {
   L.noPit = { x: 60, z: 15, r: 170 }                // no pits in the neighbourhood
   L.projDist = (x, z) => projDist(pts, x, z)
   const side = (d, off) => {
+    // Clamp to the real road length. Decoration loops run past the last point;
+    // without this the fallback origin (0,0) dropped trees, crops and props
+    // straight into the bedroom.
+    d = Math.max(0, Math.min(d, len))
     let acc = 0
-    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z); if (acc + l >= d) { const k = (d - acc) / l, dx = pts[i].x - pts[i - 1].x, dz = pts[i].z - pts[i - 1].z, ll2 = Math.hypot(dx, dz); const x = pts[i - 1].x + dx * k, z = pts[i - 1].z + dz * k; return { x: x + (-dz / ll2) * off, z: z + (dx / ll2) * off, yaw: Math.atan2(dx, dz) } } acc += l }
-    return { x: 0, z: 0, yaw: 0 }
+    for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z); if (acc + l >= d) { const k = (d - acc) / l, dx = pts[i].x - pts[i - 1].x, dz = pts[i].z - pts[i - 1].z, ll2 = Math.hypot(dx, dz) || 1; const x = pts[i - 1].x + dx * k, z = pts[i - 1].z + dz * k; return { x: x + (-dz / ll2) * off, z: z + (dx / ll2) * off, yaw: Math.atan2(dx, dz) } } acc += l }
+    // d === len (or rounding drift): place at the final point along its heading.
+    const a = pts[pts.length - 2], b = pts[pts.length - 1], dx = b.x - a.x, dz = b.z - a.z, ll2 = Math.hypot(dx, dz) || 1
+    return { x: b.x + (-dz / ll2) * off, z: b.z + (dx / ll2) * off, yaw: Math.atan2(dx, dz) }
   }
   // set a group beside the road, its front (+z) facing the carriageway
   const put = (obj, d, off) => { const s = side(d, off); obj.position.set(s.x, 0, s.z); obj.rotation.y = s.yaw + (off > 0 ? Math.PI / 2 : -Math.PI / 2); L.add(obj); return s }
@@ -57,11 +67,14 @@ export function build(G, opts = {}) {
 
   // ---- our house and lane at the start (populateHome also places the scooter, chacha, props and spawn) ----
   const house = populateHome(G, L, false, { inRoad: true })
-  // forest density grows with distance (the first stretch is town)
-  const segs = [[150, 300, 0.004], [300, 450, 0.012], [450, 600, 0.022], [600, 880, 0.034]]
+  // Trees everywhere EXCEPT inside buildings: a tight exclusion around our
+  // house and the township. The old r=110 bubble erased the entire horizon.
+  const NO_TREES = [{ x: 0, z: 4, r: 26 }, { x: 60, z: 15, r: 34 }]
+  // forest density grows with distance, but the first stretch already has trees
+  const segs = [[45, 180, 0.010], [180, 320, 0.014], [320, 450, 0.018], [450, 600, 0.024], [600, 880, 0.034]]
   for (const [a, b, d] of segs) {
     const A = side(a, 0), B = side(Math.min(len, b), 0)
-    L.add(scatterForest(G, { bounds: [Math.min(A.x, B.x) - 95, Math.min(A.z, B.z) - 95, Math.max(A.x, B.x) + 95, Math.max(A.z, B.z) + 95], trails: [{ pts, hw: 7.4 }], density: d * 0.95, seed: Math.floor(a) + 5, walk: L.walk, allTrees: true, avoid: [{ x: 60, z: 15, r: 110 }] }))
+    L.add(scatterForest(G, { bounds: [Math.min(A.x, B.x) - 95, Math.min(A.z, B.z) - 95, Math.max(A.x, B.x) + 95, Math.max(A.z, B.z) + 95], trails: [{ pts, hw: 7.4 }], density: d * 0.95, seed: Math.floor(a) + 5, walk: L.walk, allTrees: true, avoid: NO_TREES, mode: 'natural', level: L }))
   }
   // ---- vivid countryside: pavements, lanes into the fields, crops, orchards and homes ----
   {

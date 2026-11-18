@@ -17,11 +17,15 @@ function geos() {
   return (_geo = { trunk, blob, card, rock })
 }
 
-export function makeInstances(group, geo, material, mats, colors) {
+export function makeInstances(group, geo, material, mats, colors, shadow = false) {
   const m = new THREE.InstancedMesh(geo, material, mats.length)
   mats.forEach((mm, i) => { m.setMatrixAt(i, mm); if (colors) m.setColorAt(i, colors[i]) })
   m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true
-  m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; group.add(m); return m
+  m.castShadow = shadow; m.receiveShadow = false
+  // Static transforms: a real bounding sphere lets the renderer skip whole
+  // forests that are behind the camera instead of submitting every instance.
+  m.frustumCulled = true; if (m.computeBoundingSphere) m.computeBoundingSphere()
+  group.add(m); return m
 }
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3()
 const mtx = (x, y, z, sx, sy, sz, ry = 0, rx = 0, rz = 0) => { _e.set(rx, ry, rz); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(sx, sy, sz); return new THREE.Matrix4().compose(_p, _q, _s) }
@@ -31,15 +35,25 @@ export function scatterForest(G, opts) {
   const g = geos(), r = new RNG(opts.seed || 1), group = new THREE.Group()
   const [x0, z0, x1, z1] = opts.bounds, dens = (opts.density || 0.05) * G.cfg.density
   const area = (x1 - x0) * (z1 - z0), N = Math.floor(area * dens)
-  const tr = [], cn = [], tc = [], cc = [], fm = [], gm = [], bushM = []
+  const tr = [], cn = [], tc = [], cc = [], fm = [], gm = [], bushM = [], lf = []
   // 'natural' mode breaks the straight rank of trees beside a path (a fixed
   // clearance radius makes two tidy walls) by modulating that clearance with
   // noise, and uses a jittered grid so trees never coincide or leave big holes.
   const natural = opts.mode === 'natural'
+  // Auto-exclude every building footprint on the level, so no tree ever grows
+  // through a house (a hard-won bug: trees were appearing in the bedroom).
+  const houseAvoid = []
+  if (opts.level) {
+    const houses = [...(opts.level.doorHouses || []), opts.level.house].filter(Boolean)
+    for (const h of houses) if (typeof h.x === 'number' && typeof h.z === 'number') {
+      houseAvoid.push({ x: h.x, z: h.z, r: Math.max(h.w || 6, h.d || 6) * 0.75 + 3 })
+    }
+  }
+  const noGo = [...(opts.avoid || []), ...houseAvoid]
   const farFromTrails = (x, z, m) => {
     const wob = natural ? noise2(x * 0.035, z * 0.035) * 3.6 : 0
     for (const t of opts.trails || []) { if (nearestOnPoly(t.pts, x, z).d < t.hw + m + wob) return false }
-    for (const a of opts.avoid || []) if (Math.hypot(x - a.x, z - a.z) < a.r) return false
+    for (const a of noGo) if (Math.hypot(x - a.x, z - a.z) < a.r) return false
     return true
   }
   const samplePoints = (count, gap) => {
@@ -61,6 +75,12 @@ export function scatterForest(G, opts) {
     tr.push(mtx(x, gy, z + dz, tw, h * 0.72, tw, r.range(0, 6.28), r.range(-0.04, 0.04), r.range(-0.04, 0.04)))
     const cr = r.range(2.2, 3.8) * s
     for (let k = 0; k < 3; k++) { cn.push(mtx(x + r.range(-1.2, 1.2), gy + h * (0.72 + k * 0.1), z + dz + r.range(-1.2, 1.2), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), r.range(0, 6))); col.setHSL(0.26 + r.range(-0.03, 0.04), 0.4, r.range(0.14, 0.26)); cc.push(col.clone()) }
+    // Leafy silhouette instead of three bare balls: a few crossed foliage cards
+    // around each crown break up the "lollipop" outline.
+    for (let k = 0; k < 4; k++) {
+      const a = r.range(0, 6.28), rad = cr * r.range(0.5, 1.05)
+      lf.push(mtx(x + Math.cos(a) * rad, gy + h * r.range(0.78, 1.0), z + dz + Math.sin(a) * rad, cr * r.range(0.8, 1.2), cr * r.range(0.8, 1.2), 1, a, r.range(-0.5, 0.2)))
+    }
     if (opts.walk && (opts.allTrees || nearestOnPoly(opts.trails[0].pts, x, z).d < (opts.trails[0].hw + 14))) opts.walk.circle(x, z + dz, tw * 1.05 + 0.1)
   }
   const wrap = opts.wrapZ
@@ -83,11 +103,12 @@ export function scatterForest(G, opts) {
     }
   }
   const trunkMat = mat({ map: tex.bark(), color: opts.tint || 0xffffff }), leafMat = mat({ map: tex.leaf(), color: 0xffffff })
-  makeInstances(group, g.trunk, trunkMat, tr)
-  makeInstances(group, g.blob, leafMat, cn, cc)
+  makeInstances(group, g.trunk, trunkMat, tr, null, true)
+  makeInstances(group, g.blob, leafMat, cn, cc, true)
   const cardMat = (t) => new THREE.MeshStandardMaterial({ map: t, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1 })
   const card2 = (arr, t, sc) => { if (!arr.length) return; const a = arr.map(m => m.clone()); makeInstances(group, g.card, cardMat(t), a); const b = arr.map(m => { const q = new THREE.Matrix4().makeRotationY(Math.PI / 2); return m.clone().multiply(q) }); makeInstances(group, g.card, cardMat(t), b) }
   card2(fm, tex.fern(), 1); card2(gm, tex.grassBlades(), 1)
+  if (lf.length) card2(lf, tex.foliage(), 1)
   if (bushM.length) makeInstances(group, g.blob, leafMat, bushM)
   // rocks
   const rocks = []; for (let i = 0; i < area * 0.0035; i++) { const x = r.range(x0, x1), z = r.range(z0, z1); if (!farFromTrails(x, z, 0.8)) continue; const s = r.range(0.3, 1.0); rocks.push(mtx(x, ground(x, z) + s * 0.2, z, s, s, s, r.range(0, 6))); if (wrap) { const per = wrap.z1 - wrap.z0; rocks.push(mtx(x, ground(x, z + per) + s * 0.2, z + per, s, s, s, 1)); rocks.push(mtx(x, ground(x, z - per) + s * 0.2, z - per, s, s, s, 2)) } }

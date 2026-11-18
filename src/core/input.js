@@ -1,7 +1,7 @@
 // Unified keyboard / mouse (pointer lock, drag fallback) / touch input
 export const input = {
   keys: {}, pressed: new Set(), clicked: false, dx: 0, dy: 0, locked: false, enabled: false, touch: false,
-  joy: { x: 0, y: 0 }, sens: 1, canvas: null, drag: false, noLock: false,
+  joy: { x: 0, y: 0 }, sens: 1, canvas: null, drag: false, noLock: false, mouseMode: 'auto', _lx: undefined, _ly: undefined,
   down(code) { return !!this.keys[code] },
   hit(code) { return this.pressed.has(code) },
   axis() {
@@ -20,7 +20,9 @@ export const input = {
   init(canvas, hooks) {
     this.canvas = canvas; this.hooks = hooks
     // Shift state straight from the event (immune to lost keyup / focus changes)
-    const syncShift = e => { if (e.shiftKey !== undefined) this.keys.Shift = !!e.shiftKey }
+    // A short synthetic window lets on-screen buttons (Shift+E put-back) hold
+    // Shift without a real key press; mouse movement must not cancel it.
+    const syncShift = e => { if (this._mouseShiftUntil && performance.now() < this._mouseShiftUntil) return; if (e.shiftKey !== undefined) this.keys.Shift = !!e.shiftKey }
     addEventListener('keyup', syncShift, true); addEventListener('mousemove', syncShift, true); addEventListener('mousedown', syncShift, true)
     addEventListener('keydown', e => {
       syncShift(e)
@@ -39,14 +41,32 @@ export const input = {
     document.addEventListener('pointerlockerror', () => { this.noLock = true })
     addEventListener('mousemove', e => {
       if (!this.enabled) return
-      if (this.locked || this.drag) { this.dx += e.movementX; this.dy += e.movementY }
+      if (this.locked) { this.dx += e.movementX; this.dy += e.movementY; return }
+      // Pointer lock unavailable / drag mode: movementX is unreliable here, so
+      // use real cursor deltas. This makes click-and-hold look work anywhere.
+      if (this.drag) {
+        if (this._lx !== undefined) { this.dx += (e.clientX - this._lx) * 1.5; this.dy += (e.clientY - this._ly) * 1.5 }
+        this._lx = e.clientX; this._ly = e.clientY
+      }
     })
-    canvas.addEventListener('mousedown', (e) => { if (!this.enabled) return; if (e.button === 0) this.clicked = true; this.drag = true; this.lock() })
-    addEventListener('mouseup', () => { this.drag = false })
+    // Look button depends on the mode. In 'right' mode the RIGHT button drags
+    // the camera and the cursor stays visible; left click remains "interact".
+    const lookButton = () => (this.mouseMode === 'right' ? 2 : 0)
+    canvas.addEventListener('mousedown', (e) => {
+      if (!this.enabled) return
+      if (e.button === 0) this.clicked = true
+      if (e.button === lookButton()) {
+        this.drag = true; this._lx = e.clientX; this._ly = e.clientY
+        if (this.mouseMode === 'auto') this.lock()
+      }
+    })
+    canvas.addEventListener('contextmenu', e => e.preventDefault())
+    addEventListener('mouseup', () => { this.drag = false; this._lx = this._ly = undefined })
+    addEventListener('blur', () => { this.drag = false; this._lx = this._ly = undefined })
     this.setupTouch()
   },
   lock() {
-    if (this.touch || this.noLock || !this.canvas || !this.canvas.requestPointerLock || this.locked) return
+    if (this.touch || this.noLock || this.mouseMode !== 'auto' || !this.canvas || !this.canvas.requestPointerLock || this.locked) return
     try { const p = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { this.noLock = true }) } catch (e) { this.noLock = true }
   },
   unlock() { if (document.pointerLockElement) document.exitPointerLock() },

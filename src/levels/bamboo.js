@@ -1,6 +1,6 @@
 // Chapter 3-4: dense bamboo shade in the storm.
 import * as THREE from 'three'
-import { forestLevel, clearing, nightTick, windSway } from '../world/common.js'
+import { forestLevel, clearing, windSway } from '../world/common.js'
 import { makeRock, makeLog, scatterBamboo } from '../world/nature.js'
 import { audio } from '../core/audio.js'
 import { R } from '../core/util.js'

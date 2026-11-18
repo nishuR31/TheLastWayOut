@@ -3,9 +3,9 @@
 // metres, ready to be dropped into a level or a character's hand.
 import * as THREE from 'three'
 
-const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.06, ...o })
-const STEEL = M('#9aa2a3', { metalness: 0.78, roughness: 0.32 })
-const STEEL_D = M('#545b5c', { metalness: 0.7, roughness: 0.4 })
+const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.06, envMapIntensity: 0.8, ...o })
+const STEEL = M('#9aa2a3', { metalness: 0.78, roughness: 0.32, envMapIntensity: 1.4 })
+const STEEL_D = M('#545b5c', { metalness: 0.7, roughness: 0.4, envMapIntensity: 1.2 })
 const CERAMIC = M('#d8d2c2', { roughness: 0.5 })
 const WOOD = M('#6b4a2c')
 const DARK = M('#17191a', { roughness: 0.9 })

@@ -7,10 +7,10 @@ import { ui } from './core/ui.js'
 import { Env } from './world/env.js'
 import { Actor } from './world/actors.js'
 import { lod } from './world/lod.js'
-import { makeTorch } from './world/people.js'
 import { clamp, damp, lerp, angDiff, fmtClock, R, nearestOnPoly } from './core/util.js'
 import { Scooter } from './world/scooter.js'
-import { preloadPBR } from './world/textures.js'
+import { motorbike } from './world/build.js'
+import { preloadPBR, tex } from './world/textures.js'
 import { nav } from './core/nav.js'
 import { phone } from './core/phone.js'
 import { vm } from './world/viewmodel.js'
@@ -44,7 +44,22 @@ G.init = function (canvas) {
   const r = (G.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }))
   r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05; r.outputColorSpace = THREE.SRGBColorSpace
   G.scene = new THREE.Scene()
+  G.scene.environment = tex.envMap()
+  G.scene.environmentIntensity = 0.55
   G.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 1200); G.scene.add(G.camera)
+  // ---- loading screen: its own tiny scene so the progress screen shows a real
+  // rotating model instead of a blank background (and so it can animate while
+  // level modules and textures are fetched between frames). ----
+  G.loadingScene = new THREE.Scene()
+  G.loadingCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 100)
+  G.loadingCamera.position.set(0, 1.5, 7); G.loadingCamera.lookAt(0, 0.85, 0)
+  G.loadingModel = motorbike('#a31d1d', false)
+  G.loadingModel.scale.setScalar(1.5); G.loadingModel.position.set(0, 0, 0)
+  G.loadingScene.add(G.loadingModel)
+  G.loadingScene.add(new THREE.AmbientLight('#9aa6b4', 1.7))
+  const lk = new THREE.DirectionalLight('#ffd7a0', 3.1); lk.position.set(3, 6, 5); G.loadingScene.add(lk)
+  const lr = new THREE.PointLight('#d9a441', 26, 12); lr.position.set(-3, 1.5, 3); G.loadingScene.add(lr)
+  G.loadingVisible = false
   // ---- physics: split GS solver (stable stacked/vehicle contacts), swept-AABB
   // broadphase, firm contact equations, and a fixed 120 Hz substep clock. ----
   G.world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) }); G.world.allowSleep = false
@@ -112,27 +127,66 @@ G.setClock = function (h, frozen = false, show = true) { G.time = h; G.clockFroz
 G.tickClock = function (dt, rate) { if (G.clockFrozen || !rate) return; G.time += dt * rate / 3600; ui.clock(fmtClock(G.time), false, G.clockShow) }
 
 // ---------------- levels ----------------
+const nextFrame = () => new Promise(r => requestAnimationFrame(r))
+G.setLoadProgress = function (p, label) {
+  const bar = document.querySelector('#loading .ld-bar i')
+  if (bar) { bar.style.animation = 'none'; bar.style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + '%' }
+  const s = document.querySelector('#loading .ld-s'); if (s && label) s.textContent = label
+}
+// Warm level modules during quiet story beats (dialogue / long shots): ES
+// module imports are cached by the browser, so the first real load is instant.
+G.preload = function (names) {
+  const queue = (Array.isArray(names) ? names : [names]).slice()
+  const run = () => {
+    const name = queue.shift(); if (!name) return
+    const loader = LEVELS['./levels/' + name + '.js']
+    const done = () => { if (queue.length) (window.requestIdleCallback ? requestIdleCallback(run, { timeout: 1200 }) : setTimeout(run, 100)) }
+    if (!loader || G.levels[name]) return done()
+    loader().then(mod => { G.levels[name] = mod; done() }).catch(done)
+  }
+  run()
+}
 G.loadLevel = async function (name, opts = {}) {
   vm.reset()
-  document.getElementById('loading').classList.remove('hidden')
-  await new Promise(r => setTimeout(r, 30))
-  await preloadPBR()
-  if (G.level) { G.level.dispose(); G.level = null }
-  G.actors.forEach(a => a.dispose()); G.actors = []; G.comp = null; G.scooter = null; lod.clear()
-  // purge any leftover rain/torch state
-  const loader = LEVELS['./levels/' + name + '.js']
-  if (typeof loader !== 'function') {
-    document.getElementById('loading').classList.add('hidden')
-    throw new Error('Unknown level: ' + name)
+  const ld = document.getElementById('loading')
+  const closeLoading = () => { ld.classList.add('hidden'); G.loadingVisible = false }
+  try {
+    ld.classList.remove('hidden'); G.loadingVisible = true
+    G.setLoadProgress(0.04, 'raasta tayyar ho raha hai · preparing the road')
+    await nextFrame()
+    await preloadPBR()
+    G.setLoadProgress(0.32, 'textures · loading surfaces')
+    await nextFrame()
+    if (G.level) { G.level.dispose(); G.level = null }
+    G.actors.forEach(a => a.dispose()); G.actors = []; G.comp = null; G.scooter = null; lod.clear()
+    G.pit = null; G.showBody = false; G.bodyPose = null; G.fearBoost = 0; G._wantBoost = 0; G.pitCD = 0
+    G.setLoadProgress(0.48, 'duniya bana raha hai · building the world')
+    await nextFrame()
+    const loader = LEVELS['./levels/' + name + '.js']
+    if (typeof loader !== 'function') throw new Error('Unknown level: ' + name)
+    const mod = G.levels[name] || await loader()
+    G.levels[name] = mod
+    G.setLoadProgress(0.78, 'aas-paas · placing the details')
+    await nextFrame()
+    const L = mod.build(G, opts); G.level = L; G.scene.add(L.group)
+    if (L.core && L.roam && !L.pits) placePits(L, G); items.scan(G, L); fire.populate(G, L)
+    G.interacts = []
+    // Rolling levels provide groundY; flat levels (road, home, tea, hospital)
+    // do not — fall back to y=0 instead of throwing.
+    const gy = L.groundY || (() => 0)
+    const p = G.player; p.pos.set(L.spawn.x, gy(L.spawn.x, L.spawn.z), L.spawn.z); p.yaw = L.spawn.yaw; p.pitch = 0
+    G.env.indoors = false; G.env.fogMul = 1
+    G.setLoadProgress(1, 'taiyyar · ready')
+    await nextFrame()
+    return L
+  } catch (e) {
+    console.error('loadLevel failed for', name, e)
+    throw e
+  } finally {
+    // Always clear the overlay, even if a level builder throws — otherwise the
+    // loading screen stays stuck on top of the menu / game forever.
+    closeLoading()
   }
-  const mod = await loader()
-  G.pit = null; G.showBody = false; G.bodyPose = null; G.fearBoost = 0; G._wantBoost = 0; G.pitCD = 0
-  const L = mod.build(G, opts); G.level = L; G.scene.add(L.group); if (L.core && L.roam && !L.pits) placePits(L, G); items.scan(G, L); fire.populate(G, L)
-  G.interacts = []
-  const p = G.player; p.pos.set(L.spawn.x, L.groundY(L.spawn.x, L.spawn.z), L.spawn.z); p.yaw = L.spawn.yaw; p.pitch = 0
-  G.env.indoors = false; G.env.fogMul = 1
-  document.getElementById('loading').classList.add('hidden')
-  return L
 }
 G.addActor = function (outfit, over) { const a = new Actor(G, outfit, over); G.actors.push(a); return a }
 G.removeActor = function (a) { const i = G.actors.indexOf(a); if (i >= 0) G.actors.splice(i, 1); a.dispose(); if (G.comp === a) G.comp = null }
@@ -412,7 +466,23 @@ function loop(now) {
   requestAnimationFrame(loop)
   let dt = Math.min(0.05, (now - last) / 1000); last = now
   if (!G.running) return
-  if (G.paused) { G.renderer.render(G.scene, G.camera); return }
+  // Splash, loading, character select and the main menu sit over an opaque
+  // background and no level exists yet — rendering an empty scene every frame
+  // is pure waste. Skip it entirely until a level is loaded.
+  if (!G.level) {
+    if (G.loadingVisible && G.loadingScene) {
+      G.loadingModel.rotation.y += dt * 0.55
+      G.loadingModel.position.y = Math.sin(now * 0.0015) * 0.04
+      G.loadingCamera.aspect = innerWidth / innerHeight; G.loadingCamera.updateProjectionMatrix()
+      G.renderer.render(G.loadingScene, G.loadingCamera)
+    }
+    input.endFrame(); return
+  }
+  if (G.paused) {
+    // Pause / map / inventory freeze the world: draw one frame, then idle.
+    if (G._pausedDirty) { G.renderer.render(G.scene, G.camera); G._pausedDirty = false }
+    input.endFrame(); return
+  }
   if (G.fastSim) { // headless test mode: many simulation steps per frame, render rarely
     for (let i = 0; i < G.fastSim; i++) { G.lastDt = 0.05; G.step(0.05); input.endFrame() }
     G._fr = (G._fr || 0) + 1; if (G._fr % 8 === 0) G.renderer.render(G.scene, G.camera)

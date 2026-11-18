@@ -2,7 +2,7 @@
 // (with the bikes) sixty steps away at the far edge. Day first; the story turns the weather.
 import * as THREE from 'three'
 import { forestLevel, clearing, nightTick } from '../world/common.js'
-import { scatterBamboo, makeSiris, makeRock, makeLog } from '../world/nature.js'
+import { scatterBamboo, makeSiris, makeLog } from '../world/nature.js'
 import { signboard, bx, cyl, motorbike } from '../world/build.js'
 import { tex } from '../world/textures.js'
 import { R } from '../core/util.js'

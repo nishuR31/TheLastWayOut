@@ -1,6 +1,6 @@
 // Sky, fog, lights, rain, lightning, wind - all driven by story "mood" presets
 import * as THREE from 'three'
-import { damp, lerp, R } from '../core/util.js'
+import { damp, lerp, R, noise2 } from '../core/util.js'
 
 const C = (h) => new THREE.Color(h)
 // module-scope scratch objects — avoid per-frame allocations in update()
@@ -27,7 +27,10 @@ export class Env {
     this.mood = MOODS.day; this.cur = { ...MOODS.day, topC: C('#000'), horC: C('#000'), sunCc: C('#fff'), hemiSc: C('#fff'), hemiGc: C('#fff'), sunDirV: new THREE.Vector3() }
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x333322, 0.6); sc.add(this.hemi)
     this.sun = new THREE.DirectionalLight(0xffffff, 1); sc.add(this.sun, this.sun.target)
-    this.sun.castShadow = false; this.sun.shadow.mapSize.set(1024, 1024); const s = this.sun.shadow.camera; s.left = -22; s.right = 22; s.top = 22; s.bottom = -22; s.near = 1; s.far = 200; this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.04
+    // Shadows ground every prop and character — the single biggest realism win.
+    this.sun.castShadow = true
+    const sm = ({ low: 512, med: 768, high: 1024 }[G.cfg.gfx] || 768)
+    this.sun.shadow.mapSize.set(sm, sm); const s = this.sun.shadow.camera; s.left = -22; s.right = 22; s.top = 22; s.bottom = -22; s.near = 1; s.far = 200; this.sun.shadow.bias = -0.0008; this.sun.shadow.normalBias = 0.04
     this.fog = new THREE.FogExp2(0x000000, 0.02); sc.fog = this.fog
     // sky dome
     const geo = new THREE.SphereGeometry(900, 24, 14)
@@ -45,8 +48,24 @@ export class Env {
           #include <colorspace_fragment>
         }` })
     this.sky = new THREE.Mesh(geo, this.skyMat); this.sky.renderOrder = -10; this.sky.frustumCulled = false; sc.add(this.sky)
+    // Distant horizon silhouette — low hills / treeline so the world does not
+    // end in a hard line against the sky (especially visible on the long road).
+    {
+      const seg = 128, pos = [], idx = []
+      for (let i = 0; i <= seg; i++) {
+        const a = (i / seg) * Math.PI * 2, cx = Math.cos(a), cz = Math.sin(a)
+        const h = 5 + noise2(cx * 3 + 11, cz * 3 + 7) * 24 + noise2(cx * 9, cz * 9) * 7
+        pos.push(cx * 430, -14, cz * 430, cx * 430, h, cz * 430)
+        if (i < seg) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2) }
+      }
+      const hg = new THREE.BufferGeometry()
+      hg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); hg.setIndex(idx)
+      this.horizon = new THREE.Mesh(hg, new THREE.MeshBasicMaterial({ color: 0x000000, fog: false, side: THREE.DoubleSide, depthWrite: false }))
+      this.horizon.renderOrder = -9; sc.add(this.horizon)
+    }
     // rain streaks (camera-relative)
-    this.rainN = 1400; const pos = new Float32Array(this.rainN * 6); this.rainSeed = new Float32Array(this.rainN * 3)
+    this.rainN = ({ low: 500, med: 900, high: 1400 }[G.cfg.gfx] || 900)
+    const pos = new Float32Array(this.rainN * 6); this.rainSeed = new Float32Array(this.rainN * 3)
     for (let i = 0; i < this.rainN; i++) { this.rainSeed[i * 3] = R.range(-14, 14); this.rainSeed[i * 3 + 1] = R.range(0, 14); this.rainSeed[i * 3 + 2] = R.range(-14, 14) }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(pos, 3))
     this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xaab8cc, transparent: true, opacity: 0.35, depthWrite: false })); this.rain.frustumCulled = false; sc.add(this.rain)
@@ -91,6 +110,7 @@ export class Env {
     this.skyMat.uniforms.top.value.copy(c.topC); this.skyMat.uniforms.hor.value.copy(c.horC); this.skyMat.uniforms.sunDir.value.copy(c.sunDirV); this.skyMat.uniforms.sunC.value.copy(c.sunCc); this.skyMat.uniforms.sunI.value = c.sun > 0.2 ? 1 : 0
     this.skyMat.uniforms.stars.value = this.name === 'day' || this.name === 'evening' || this.name === 'homeDay' || this.name === 'dawn' ? 0 : (c.rain > 0.3 ? 0.1 : 1)
     this.sky.position.copy(camPos)
+    if (this.horizon) { this.horizon.position.copy(camPos); this.horizon.material.color.copy(c.horC).multiplyScalar(0.6) }
     this.rainAmt = c.rain; this.windV = c.wind + this.gust
     // gusts
     this.gustT -= dt; if (this.gustT <= 0) { this.gustT = R.range(3, 9) / (0.3 + c.wind * 2); this.gustTarget = R.range(0.2, 0.6) * (0.3 + c.wind * 1.5) } if (this.gustTarget !== undefined) { this.gust = damp(this.gust, this.gustTarget, 1.2, dt); this.gustTarget *= Math.exp(-dt * 0.45) }

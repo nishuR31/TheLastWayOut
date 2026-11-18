@@ -61,12 +61,13 @@ export function makeTraffic(L, G, pts, o = {}) {
   for (let i = 0; i < count; i++) {
     const kind = kinds[i % kinds.length], m = mkMesh(kind, i + 1); m.visible = false; L.add(m)
     const rider = addRider(m, kind, 1000 + i * 37)
-    vs.push({ m, rider, kind, len: SPEC[kind].len, dir: i % 2 ? -1 : 1, d: 0, speed: 0, want: 12, pref: i % 3 === 0 ? 1 : 0, lat: 0, wait: R.range(0, 6), near: false, honkT: 0, lcT: 0 })
+    vs.push({ m, rider, kind, len: SPEC[kind].len, dir: i % 2 ? -1 : 1, d: 0, speed: 0, want: 12, pref: i % 3 === 0 ? 1 : 0, lat: 0, wait: R.range(0, 6), near: false, honkT: 0, lcT: 0, placed: false })
   }
   const respawn = (v, p0) => {
     const sp = SPEC[v.kind]; v.want = R.range(sp.v[0], sp.v[1]) * (o.speedMul || 1); v.speed = v.want * 0.8
     v.d = v.dir > 0 ? p0 - R.range(90, 230) : p0 + R.range(150, 320)
     v.near = false; v.honkT = R.range(0, 5); v.pref = R.next() < 0.35 ? 1 : 0
+    v.placed = false // must not be drawn at its stale/initial position (0,0 = the bedroom)
   }
   // lateral coordinate along the path normal (+ = the "off > 0" side) for a vehicle in lane offset `lane` of heading `dir`
   const latOf = (dir, lane) => (dir > 0 ? -lane : lane)
@@ -79,7 +80,7 @@ export function makeTraffic(L, G, pts, o = {}) {
     const pspd = riding ? Math.abs(G.scooter.speed) : Math.hypot(G.player.vel || 0)
     if (!init) { init = true; vs.forEach(v => respawn(v, p0)) }
     for (const v of vs) {
-      if (v.wait > 0) { v.wait -= dt; v.m.visible = v.d >= 0 && v.d <= len && v.speed > 0; if (v.wait > 0) continue }
+      if (v.wait > 0) { v.wait -= dt; v.m.visible = v.placed && v.d >= 0 && v.d <= len && v.speed > 0; if (v.wait > 0) continue }
       const lanes = lanesAt(v.d), lane = lanes[Math.min(v.pref, lanes.length - 1)]
       v.lat += (latOf(v.dir, lane) - v.lat) * Math.min(1, dt * 1.6)
       // ---- find the car in front (same direction, same lane, ahead) ----
@@ -115,7 +116,7 @@ export function makeTraffic(L, G, pts, o = {}) {
       const q = ptAt(pts, v.d), yaw = v.dir > 0 ? q.yaw : q.yaw + Math.PI
       // lateral position along the path normal; a small yaw during a lane change
       const nx = -Math.cos(q.yaw), nz = Math.sin(q.yaw), tgt = latOf(v.dir, lane), steer = (v.lat - tgt) * 0.04 * v.dir
-      v.m.position.set(q.x + nx * v.lat, 0, q.z + nz * v.lat); v.m.rotation.y = yaw + steer; v.m.visible = true
+      v.m.position.set(q.x + nx * v.lat, 0, q.z + nz * v.lat); v.m.rotation.y = yaw + steer; v.m.visible = true; v.placed = true
       if (v.rider) { v.rider.update(dt, v.speed); v.rider.root.rotation.z = steer * 1.6 }
       const dx = v.m.position.x - pl.x, dz = v.m.position.z - pl.z, dist = Math.hypot(dx, dz)
       if (!v.near && dist < 40) { v.near = true; if (G.audio.ctx) { const a = { x: v.m.position.x, y: 1, z: v.m.position.z }; G.audio.passBy(a, { x: pl.x, y: 1, z: pl.z }, 3.5, hornOf(v.kind)); if (Math.random() < 0.55) setTimeout(() => G.audio.horn(a, hornOf(v.kind)), 900) } }

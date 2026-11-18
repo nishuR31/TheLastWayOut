@@ -17,7 +17,7 @@ const CARD = [
 const $ = (id) => document.getElementById(id)
 
 export const keyaid = {
-  el: null, card: null, sig: '', showT: 0, peek: false,
+  el: null, card: null, sig: '', showT: 0, peek: false, poll: 0,
 
   init() {
     this.el = $('keyaid'); this.card = $('keycard')
@@ -64,12 +64,17 @@ export const keyaid = {
     if (!this.el) return
     const mode = (G.cfg && G.cfg.keyaid) || 'context'
     if (mode === 'off' || G.paused) { this.el.classList.remove('show'); return }
-    const list = this.hints(G)
-    const sig = list.map(h => h[0] + h[1]).join('|')
-    if (sig !== this.sig) {
-      this.sig = sig
-      this.el.innerHTML = list.map(([k, v]) => `<span class="ka"><kbd>${k}</kbd>${v}</span>`).join('')
-      this.showT = mode === 'always' ? Infinity : 5.5
+    // Rebuilding the hint list walks items/fire near-checks; 10 Hz is plenty.
+    this.poll -= dt
+    if (this.poll <= 0) {
+      this.poll = 0.1
+      const list = this.hints(G)
+      const sig = list.map(h => h[0] + h[1]).join('|')
+      if (sig !== this.sig) {
+        this.sig = sig
+        this.el.innerHTML = list.map(([k, v]) => `<span class="ka"><kbd>${k}</kbd>${v}</span>`).join('')
+        this.showT = mode === 'always' ? Infinity : 5.5
+      }
     }
     if (this.showT !== Infinity) this.showT -= dt
     // Quiet down during dialogue so a subtitle is never competed with.
