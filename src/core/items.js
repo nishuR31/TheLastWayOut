@@ -20,14 +20,18 @@ export const items = {
       const w = new THREE.Vector3(); o.getWorldPosition(w)
       if (o.userData.hook) {
         // Exactly one copy of the key must exist: on this hook, or in the pocket.
-        const keyOn = !G.hasKey
+        // itemTaken is authoritative — once picked up, a level reload must never
+        // silently hang it back on the hook.
+        const taken = !!(G.itemTaken && G.itemTaken.key)
+        const keyOn = !G.hasKey && !taken
         let km = o.userData.keyMesh
         if (!km) { km = makeKeyMesh(); km.position.set(0, 0, 0.06); o.add(km); o.userData.keyMesh = km }
         km.visible = keyOn
         this.tables.push({ x: w.x, z: w.z, y: w.y, r: 1.9, obj: o, hook: true, keyOn })
       }
       if (o.userData.helmetRack) {
-        ;(o.userData.helmets || []).forEach(h => { h.visible = !G.hasHelmet })
+        const taken = !!(G.itemTaken && G.itemTaken.helmet)
+        ;(o.userData.helmets || []).forEach(h => { h.visible = !G.hasHelmet && !G.helmetOnBike && !taken })
         this.racks.push({ x: w.x, z: w.z, y: w.y, r: 2.0, obj: o, helmet: true })
       }
       if (o.userData.table) { const t = o.userData.table; this.tables.push({ x: w.x, z: w.z, y: w.y + t.h, r: Math.max(t.w, t.d) / 2 + 0.9, obj: o }) }
@@ -49,14 +53,14 @@ export const items = {
       G.visorDown = false
       const v = document.getElementById('visor'); if (v) v.classList.remove('down')
     }
+    const tookHelmet = !!(G.itemTaken && G.itemTaken.helmet)
     for (const r of this.racks) {
-      const away = !!G.hasHelmet || !!G.helmetOnBike
+      const away = !!G.hasHelmet || !!G.helmetOnBike || tookHelmet
       ;(r.obj.userData.helmets || []).forEach(h => { h.visible = !away })
     }
-    if (!G.hasPhone && !this.placed && G._itemStaged && !(G.itemTaken && G.itemTaken.phone)) {
-      G.hasPhone = true
-      ui.toast('Phone wapis jeb mein · Phone back in your pocket', 2.2)
-    }
+    // Deliberately NO "self-heal" that flips hasPhone here: that ran every
+    // frame and could hand the phone back (or re-stage it) behind the player's
+    // back. scan() already returns a left-behind phone on level change.
   },
   all() { return [...this.tables, ...this.racks] },
   near(G) {
@@ -148,9 +152,12 @@ export const items = {
   stageHome(G, x, z) {
     let best = null, bd = 1e9
     for (const t of this.tables) { if (t.hook) continue; const d = Math.hypot(t.x - x, t.z - z); if (d < bd) { bd = d; best = t } }
-    if (best) { this.placed = { table: best, phone: this._mesh(G, 'phone', best), key: null }; G.hasPhone = false }
+    const took = G.itemTaken || {}
+    // Only stage what the player has never picked up. Re-running Chapter 1 must
+    // not teleport a carried phone/key back to the table/hook.
+    if (best && !took.phone && !G.hasPhone) { this.placed = { table: best, phone: this._mesh(G, 'phone', best), key: null }; G.hasPhone = false }
     const hook = this.tables.find(t => t.hook)
-    if (hook && hook.keyOn) G.hasKey = false // only if the hook actually still holds it
+    if (hook && hook.keyOn && !took.key) G.hasKey = false // only if the hook actually still holds it
     G._itemStaged = true
     this.reconcile(G)
     return !!best

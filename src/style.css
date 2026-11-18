@@ -23,10 +23,12 @@ body.right-look #c{cursor:crosshair}
 #helmetvision{background:radial-gradient(ellipse at center,transparent 36%,rgba(3,5,8,.86) 100%);opacity:0;transition:opacity .45s;z-index:3;pointer-events:none}
 #visor{position:fixed;inset:0;z-index:4;pointer-events:none;transform:translateY(-103%);transition:transform .55s cubic-bezier(.2,.8,.2,1)}
 #visor.down{transform:translateY(0)}
-#visor::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,14,.95) 0%,rgba(6,10,16,.82) 58%,rgba(8,12,18,.2) 76%,transparent 88%)}
+#visor::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(18,28,40,.58) 0%,rgba(20,30,42,.4) 44%,rgba(22,32,44,.12) 70%,transparent 84%)}
 #visor::after{content:'';position:absolute;left:9%;right:9%;bottom:22%;height:10px;border-radius:50%;background:linear-gradient(90deg,transparent,rgba(150,170,190,.5),transparent)}
 /* Sense of speed: peripheral streaks that build with velocity. The visor
    (V) cuts most of the wind rush, so JS scales this down when it is down. */
+/* A subtle brow line so first-person view reflects the helmet being worn. */
+#helmetbrow{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(ellipse 70% 26% at 50% -4%,rgba(12,17,24,.72) 0%,rgba(12,17,24,.28) 55%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,transparent 100%);-webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%)}
 #speedfx{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .16s linear;mix-blend-mode:screen;
   background:repeating-conic-gradient(from 0deg at 50% 50%,transparent 0deg 2.4deg,rgba(212,228,246,.15) 2.5deg 3deg,transparent 3.1deg 7deg),radial-gradient(ellipse at center,transparent 40%,rgba(150,190,235,.2) 100%);
   -webkit-mask-image:radial-gradient(ellipse at center,transparent 38%,#000 80%);mask-image:radial-gradient(ellipse at center,transparent 38%,#000 80%)}

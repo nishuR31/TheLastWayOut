@@ -86,11 +86,17 @@ function setCrashCam(G, p) {
 
 function updatePit(G, dt) {
   const P = G.pit, p = G.player, sc = G.scooter, L = G.level; P.t += dt
+  // Wall-clock watchdog: on a slow GPU the 2.4 s of game time can take minutes
+  // and the scene looks frozen. Never hold the player hostage for >6 real s.
+  if (!P._wall) P._wall = performance.now()
+  if (P.kind && P.kind.indexOf('crash') === 0 && P.stage === 0 && performance.now() - P._wall > 6000) { finishPit(G); return }
   // a story camera shot can clear camOverride mid-recovery — restore it so the pit scene never crashes
   const o = G.camOverride || (G.camOverride = { pos: new THREE.Vector3(p.pos.x + 6.0, 5.0, p.pos.z + 6.0), look: new THREE.Vector3(p.pos.x + 0.5, 0.8, p.pos.z + 0.45), fov: 58, snap: true })
   if (P.stage === 0) {                     // lying in the pit
     p.vel = 0; o.look.set(p.pos.x, 0.5, p.pos.z)
-    if (P.t > 2.4) {
+    // small drift so the crash shot never looks like a frozen still frame
+    const a = P.t * 1.1 + 0.6; o.pos.set(p.pos.x + Math.cos(a) * 6.0, 5.0, p.pos.z + Math.sin(a) * 6.0)
+    if (P.t > 1.6) {
       if (P.kind === 'crash-road') {
         // a passing rider helps you up and stands the bike back on its kickstand
         const helper = G.addActor('farmer')

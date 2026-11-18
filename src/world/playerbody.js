@@ -1,14 +1,23 @@
 // The player's own body, only shown in third-person view (C key).
 import * as THREE from 'three'
 import { humanFromOutfit } from './humanRig.js'
+import { ridingHelmet } from './build.js'
 
 export const body = {
-  G: null, P: null, root: null,
+  G: null, P: null, root: null, helmet: null,
   init(G) {
     this.G = G; this.P = humanFromOutfit('nishan'); this.root = this.P.root; this.root.visible = false; G.scene.add(this.root)
+    // Helmet is worn on the HEAD joint, so it follows every look/turn animation.
+    this.helmet = ridingHelmet('#c02020')
+    this.helmet.position.set(0, 0.135, 0.005)
+    this.helmet.scale.setScalar(0.95)
+    this.helmet.visible = false
+    this.P.head.add(this.helmet)
   },
   update(dt) {
     const G = this.G, p = G.player; if (!this.root) return
+    // The rig's hair/cap stays underneath; the shell covers it when worn.
+    if (this.helmet) this.helmet.visible = !!G.hasHelmet
     const vis = ((!!G.tpp && !G.camOverride) || !!G.showBody) && !!G.level
     this.root.visible = vis; if (!vis) return
     if (p.mode === 'ride' && G.scooter) {

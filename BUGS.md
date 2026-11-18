@@ -1,5 +1,19 @@
 # BUGS / STATUS (honest)
 
+## FIXED — post-crash / helmet pass (2026-11-18)
+- Crash "freeze": `roam.js` now uses a wall-clock watchdog (force recovery after
+  6 real seconds) plus a gentle camera drift, and the crash-road game-time delay
+  was cut 2.4 s → 1.6 s. Verified live: pit cleared, `canMove` restored and
+  `camOverride` released within ~6 s, 0 errors.
+- Items returning to their stations by themselves: `items.js` now treats
+  `itemTaken` as authoritative in `scan()`/`stageHome()`/`reconcile()`, and the
+  per-frame "self-heal" that re-granted the phone was removed. Verified: key and
+  helmets stay hidden after a re-scan once taken.
+- Helmet now worn on the third-person head joint (`playerbody.js`) and a subtle
+  first-person brow appears while worn; full-face men's/sports helmet model
+  (`ridingHelmet()` in `build.js`) replaces the round bowl on the rack.
+- Visor lightened substantially (CSS gradient + reduced helmet-vision tint).
+
 ## FIXED — visual pass 2 (2026-11-18, screenshots from live play)
 - Interior partition half-walls in `home.js` removed. They were free-standing
   slabs (no backing structure) that read as walls floating above the floor and

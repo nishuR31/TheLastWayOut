@@ -719,7 +719,9 @@ function updateInteract(dt) {
 function updateCameraBase(dt) {
   // helmet narrows peripheral vision; the dropped visor narrows it further
   const hv = document.getElementById('helmetvision')
-  if (hv) hv.style.opacity = G.hasHelmet ? (G.visorDown ? '0.92' : '0.5') : '0'
+  if (hv) hv.style.opacity = G.hasHelmet ? (G.visorDown ? '0.66' : '0.3') : '0'
+  const brow = document.getElementById('helmetbrow')
+  if (brow) brow.style.opacity = G.hasHelmet ? (G.visorDown ? '0' : '0.8') : '0' // visor replaces the brow when down
   const fx = document.getElementById('speedfx')
   if (fx && (!G.player || G.player.mode !== 'ride' || G.camOverride)) fx.style.opacity = '0'
   const p = G.player, cam = G.camera

@@ -274,7 +274,32 @@ export function signboard(text, bg = '#1f5a34', fg = '#f2f0e0', w = 2.2, h = 1.0
 export function bush(s = 1) { const g = new THREE.Group(), m = S({ map: tex.leaf() }); for (let i = 0; i < 4; i++) sph(g, 0.4 * s, m, R.range(-0.4, 0.4) * s, 0.35 * s, R.range(-0.4, 0.4) * s, 1, 0.8, 1); return g }
 export function can() { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 12), new THREE.MeshStandardMaterial({ color: '#c0161c', metalness: 0.8, roughness: 0.3 })); g.add(m); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.033, 0.01, 12), new THREE.MeshStandardMaterial({ color: '#ccc', metalness: 0.9, roughness: 0.3 })); t.position.y = 0.06; g.add(t); return g }
 export function ball() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshStandardMaterial({ map: tex.cloth('#e8e8e0', '#2a60b0', 'print'), roughness: 0.6 })); m.castShadow = true; return m }
-export function helmetRack() { const g = new THREE.Group(); bx(g, 0.6, 0.05, 0.2, wood(), 0, 1.4, 0); g.userData.helmets = []; g.userData.helmetRack = true; for (const x of [-0.18, 0.18]) { const h = sph(g, 0.14, S({ color: x < 0 ? '#c02020' : '#202020', roughness: 0.3, metalness: 0.2 }), x, 1.55, 0.02, 1, 0.9, 1.1); g.userData.helmets.push(h) } return g }
+// A full-face riding helmet (men's / unisex sports shape), not a round bowl.
+// Reused on the rack, on the player's head and on the bike.
+export function ridingHelmet(color = '#c02020') {
+  const g = new THREE.Group()
+  const shell = S({ color, roughness: 0.32, metalness: 0.14 })
+  const trim = S({ color: '#15191d', roughness: 0.28, metalness: 0.45 })
+  sph(g, 0.145, shell, 0, 0.055, 0, 1.0, 0.92, 1.05)          // crown
+  bx(g, 0.165, 0.075, 0.085, shell, 0, 0.005, 0.102)          // chin bar
+  const vis = bx(g, 0.156, 0.05, 0.014, trim, 0, 0.078, 0.132); vis.rotation.x = -0.14 // visor slot
+  bx(g, 0.014, 0.05, 0.075, trim, -0.13, 0.075, 0.01)         // side vents
+  bx(g, 0.014, 0.05, 0.075, trim, 0.13, 0.075, 0.01)
+  const roll = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.017, 6, 14), trim)
+  roll.rotation.x = Math.PI / 2; roll.position.y = -0.052; g.add(roll) // neck roll
+  return g
+}
+export function helmetRack() {
+  const g = new THREE.Group()
+  bx(g, 0.6, 0.05, 0.2, wood(), 0, 1.4, 0)
+  g.userData.helmets = []; g.userData.helmetRack = true
+  for (const x of [-0.18, 0.18]) {
+    const h = ridingHelmet(x < 0 ? '#c02020' : '#22262a')
+    h.position.set(x, 1.56, 0.02); h.scale.setScalar(0.95)
+    g.add(h); g.userData.helmets.push(h)
+  }
+  return g
+}
 export function ropeBridgeless() { return new THREE.Group() }
 
 // ---------- vehicles (forward = +z) ----------
