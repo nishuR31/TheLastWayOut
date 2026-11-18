@@ -720,17 +720,24 @@ function updateCameraBase(dt) {
   // helmet narrows peripheral vision; the dropped visor narrows it further
   const hv = document.getElementById('helmetvision')
   if (hv) hv.style.opacity = G.hasHelmet ? (G.visorDown ? '0.92' : '0.5') : '0'
+  const fx = document.getElementById('speedfx')
+  if (fx && (!G.player || G.player.mode !== 'ride' || G.camOverride)) fx.style.opacity = '0'
   const p = G.player, cam = G.camera
   if (G.camOverride) { const o = G.camOverride; if (o.snap) cam.position.copy(o.pos); else cam.position.lerp(o.pos, Math.min(1, dt * 4)); cam.lookAt(o.look); cam.fov = lerp(cam.fov, o.fov || 62, 0.1); cam.updateProjectionMatrix(); return }
   let ex, ey, ez, yaw = p.yaw, pitch = p.pitch, roll = 0
   if (p.mode === 'ride' && G.scooter) {
     const sc = G.scooter, v = _va; sc.eye.getWorldPosition(v)
     const q = _vq; sc.eye.getWorldQuaternion(q); const e = _ve.setFromQuaternion(q, 'YXZ')
-    const spd = sc.speed, bump = Math.sin(performance.now() * 0.021) * 0.007 * clamp(Math.abs(spd) / 8, 0, 1)
+    const spd = sc.speed, fast = clamp(Math.abs(spd) / 16, 0, 1)
+    // A lowered visor is a physical windshield: less buffeting and less blur.
+    const wind = G.visorDown ? 0.35 : 1
+    const bump = Math.sin(performance.now() * 0.021) * 0.007 * fast * wind
+    const fx = document.getElementById('speedfx')
+    if (fx) fx.style.opacity = String(+(fast * 0.85 * wind).toFixed(3))
     p.rideYaw = e.y; p.yaw = e.y + (p.lookOff || 0)
     cam.rotation.order = 'YXZ'; cam.position.set(v.x, v.y + bump, v.z); cam.rotation.set(p.pitch, p.yaw + Math.PI, -sc.lean * 0.5)
     { const px = sc.chassis.position.x, pz = sc.chassis.position.z; p.pos.set(px, G.level && G.level.groundY ? G.level.groundY(px, pz) : 0, pz) }
-    cam.fov = lerp(cam.fov, ((G.cfg.fov || 70) + clamp(Math.abs(spd) / 11, 0, 1) * 10) * horror.fovFactor(), 0.05); cam.updateProjectionMatrix(); return
+    cam.fov = lerp(cam.fov, ((G.cfg.fov || 70) + fast * (G.visorDown ? 7 : 12)) * horror.fovFactor(), 0.05); cam.updateProjectionMatrix(); return
   }
   const eye = p.eyeH - p.crouch * 0.75 - p.headDip
   const bob = Math.sin(p.bobT) * 0.035 * (1 - p.crouch * 0.4) * (1 + p.tired * 0.4), sway = Math.cos(p.bobT * 0.5) * 0.02

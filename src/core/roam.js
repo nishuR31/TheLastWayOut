@@ -71,13 +71,23 @@ function startPit(G, pit, kind = 'pit') {
   audio.fall(p.pos); audio.thud(p.pos, 0.8); G.camShake(1); ui.flash(0.7)
   if (kind && kind.indexOf('crash') === 0) { audio.horn && audio.horn(p.pos, 'truck'); ui.caption('[tyres screech. A crash: metal, glass, shouting]', 3.4) } else ui.caption('[a hard fall into the dark]', 3)
   G.bodyPose = 'fallen'; G.showBody = true; G._wantBoost = 0.7; G.pitCD = 25
-  G.camOverride = { pos: new THREE.Vector3(p.pos.x + 3.4, 2.4, p.pos.z + 3.4), look: new THREE.Vector3(p.pos.x, 0.5, p.pos.z), fov: 58, snap: true }
+  setCrashCam(G, p)
+}
+// A road crash happens beside a truck — the old camera (3.4 m out, 2.4 m up)
+// regularly ended up INSIDE the truck mesh. Lift it above any vehicle roof and
+// aim at the fallen rider (and the helper who arrives) so the beat is readable.
+function setCrashCam(G, p) {
+  G.camOverride = {
+    pos: new THREE.Vector3(p.pos.x + 6.0, 5.0, p.pos.z + 6.0),
+    look: new THREE.Vector3(p.pos.x + 0.5, 0.8, p.pos.z + 0.45),
+    fov: 58, snap: true
+  }
 }
 
 function updatePit(G, dt) {
   const P = G.pit, p = G.player, sc = G.scooter, L = G.level; P.t += dt
   // a story camera shot can clear camOverride mid-recovery — restore it so the pit scene never crashes
-  const o = G.camOverride || (G.camOverride = { pos: new THREE.Vector3(p.pos.x + 3.2, 2.2, p.pos.z + 3.2), look: new THREE.Vector3(p.pos.x, 0.6, p.pos.z), fov: 58, snap: true })
+  const o = G.camOverride || (G.camOverride = { pos: new THREE.Vector3(p.pos.x + 6.0, 5.0, p.pos.z + 6.0), look: new THREE.Vector3(p.pos.x + 0.5, 0.8, p.pos.z + 0.45), fov: 58, snap: true })
   if (P.stage === 0) {                     // lying in the pit
     p.vel = 0; o.look.set(p.pos.x, 0.5, p.pos.z)
     if (P.t > 2.4) {

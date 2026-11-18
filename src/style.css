@@ -25,6 +25,11 @@ body.right-look #c{cursor:crosshair}
 #visor.down{transform:translateY(0)}
 #visor::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(4,8,14,.95) 0%,rgba(6,10,16,.82) 58%,rgba(8,12,18,.2) 76%,transparent 88%)}
 #visor::after{content:'';position:absolute;left:9%;right:9%;bottom:22%;height:10px;border-radius:50%;background:linear-gradient(90deg,transparent,rgba(150,170,190,.5),transparent)}
+/* Sense of speed: peripheral streaks that build with velocity. The visor
+   (V) cuts most of the wind rush, so JS scales this down when it is down. */
+#speedfx{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .16s linear;mix-blend-mode:screen;
+  background:repeating-conic-gradient(from 0deg at 50% 50%,transparent 0deg 2.4deg,rgba(212,228,246,.15) 2.5deg 3deg,transparent 3.1deg 7deg),radial-gradient(ellipse at center,transparent 40%,rgba(150,190,235,.2) 100%);
+  -webkit-mask-image:radial-gradient(ellipse at center,transparent 38%,#000 80%);mask-image:radial-gradient(ellipse at center,transparent 38%,#000 80%)}
 #scare-flash{background:#000;opacity:0;transition:opacity .09s;z-index:4}
 #scare-flash.white{background:#e8f0ff}
 #flash{background:#cfe0ff;opacity:0;z-index:3}
@@ -418,7 +423,11 @@ body #objective.show{opacity:calc(1 - var(--dread)*.5)}
 /* ---- contextual key aid: memory support, not a tutorial ------------------ */
 #keyaid{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:5px 10px;max-width:min(760px,92vw);opacity:0;transition:opacity .5s;pointer-events:none;z-index:6}
 /* mouse action bar — the same keys, clickable */
-#actionbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:5px;max-width:94vw;pointer-events:auto;z-index:7;opacity:.72;transition:opacity .2s}
+/* Hidden by default — keyboard is the primary control. Only shown when the
+   player picks a cursor-based mouse-look mode (right/drag), where clicking a
+   button actually makes sense. */
+#actionbar{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);display:none;flex-wrap:wrap;justify-content:center;gap:5px;max-width:94vw;pointer-events:auto;z-index:7;opacity:.72;transition:opacity .2s}
+body.show-actionbar #actionbar{display:flex}
 #actionbar:hover,#actionbar:focus-within{opacity:1}
 #actionbar button{display:inline-flex;align-items:center;gap:4px;margin:0;padding:4px 7px;min-width:0;background:rgba(8,10,9,.82);border:1px solid #44403a;border-radius:3px;color:#cfc9b8;font:600 10px Inter,sans-serif;letter-spacing:.06em;cursor:pointer;transition:border-color var(--ease),background var(--ease),transform var(--ease)}
 #actionbar button:hover{border-color:var(--accent);background:#1d1b14;color:#fff}

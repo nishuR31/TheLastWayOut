@@ -1,5 +1,24 @@
 # BUGS / STATUS (honest)
 
+## FIXED — visual pass 2 (2026-11-18, screenshots from live play)
+- Interior partition half-walls in `home.js` removed. They were free-standing
+  slabs (no backing structure) that read as walls floating above the floor and
+  chopped the single room into unusable slivers — all four wall screenshots.
+  The house is now one open room; only the outer walls remain.
+- Duplicate helmet pair on the chair by the bed removed. Helmets now exist in
+  exactly one place (the rack by the door), cutting a few meshes/materials.
+- Bed rebuilt in `build.js`: one fitted bedsheet over the whole mattress plus a
+  small folded blanket at the foot in the same colour family — no more two
+  contrasting patterns spliced down the middle.
+- Bottom key bar (`#actionbar`) hidden by default (only shown in cursor-based
+  mouse-look modes); contextual `#keyaid` default changed to `off` with a
+  one-time migration for old saves. Tab still opens the full key card.
+- Visor logic: `#speedfx` peripheral speed streaks scale with velocity and are
+  cut ~65% when the visor is down (wind protection); camera buffeting and FOV
+  push are reduced too.
+- Crash camera in `roam.js` lifted to 5 m above the road and aimed at the rider
+  + arriving helper, so it no longer ends up inside the struck truck.
+
 ## FIXED — performance / playability pass (2026-11-18)
 Profiled live with CDP (`render` + `G.step` wrapped, CPU sampling profiler):
 - Frame time was almost entirely rendering (~10.4 s/frame under SwiftShader);

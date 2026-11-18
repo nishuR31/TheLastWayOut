@@ -31,8 +31,9 @@ export function populateHome(G, L, night, o = {}) {
   // the bed you wake up in (final script: phone face-up on the bed, helmets by the door)
   const bedObj = bed(); house.place(bedObj, -3.5, -2.0, 0, 0); L.refs.bedPos = house.local(-2.9, 0.7, -2.0)
   const phoneOnBed = makePhone(); house.place(phoneOnBed, -3.2, 0.7, -2.0)
-  // The opening beat, from the script: "sunlight through a thin curtain", the
-  // phone face-up on the bed, and two helmets on a chair by the bed.
+  // The opening beat, from the script: "sunlight through a thin curtain" and
+  // the phone face-up on the bed. Helmets live in ONE place — the rack by the
+  // door (below) — not duplicated on a chair.
   // A real window behind the curtain, with a warm pane and a frame.
   const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.1), new THREE.MeshBasicMaterial({ color: '#ffe6b8' }))
   pane.position.set(-3.5, 1.75, -3.09); pane.rotation.y = Math.PI; house.group.add(pane)
@@ -49,11 +50,6 @@ export function populateHome(G, L, night, o = {}) {
   const patch = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), new THREE.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.16, depthWrite: false }))
   patch.rotation.x = -Math.PI / 2; patch.position.set(-3.4, 0.02, -1.55); house.group.add(patch)
   const bedChair = chair(); bedChair.scale.setScalar(1.25); house.place(bedChair, -2.1, -2.5, 0, 0.3)
-  for (const [i, col] of ['#a31d1d', '#222'].entries()) {
-    const helmet = new THREE.Group()
-    sph(helmet, 0.16, new THREE.MeshStandardMaterial({ color: col, roughness: 0.5 }), 0, 0, 0, 1, 0.75, 1)
-    helmet.position.set(i ? 0.16 : -0.16, 0.5, 0); bedChair.add(helmet)
-  }
   const sideTable = table(0.5, 0.4, 0.5); house.place(sideTable, -4.1, -1.6, 0, 0)
   // kitchen corner
   house.place(chulha(), -4.0, 0.1, 0, 0)
@@ -69,21 +65,10 @@ export function populateHome(G, L, night, o = {}) {
   L.refs.homeTable = house.local(2.4, 0.75, -0.8)
   L.refs.tiffinPos = house.local(-2.9, 0.9, 0.4)
   L.refs.tiffin = tiffin
-  // Interior partitions that read as REAL walls: full height, flush with the
-  // outer walls, and joined by a lintel so the gap is a doorway, not a floating
-  // waist-high slab. The bed stays in the back-left bedroom.
-  {
-    const pw = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#dccba6') }))
-    const wall = (lx0, lz0, lx1, lz1, hh, y) => {
-      const ww = Math.max(0.12, Math.abs(lx1 - lx0)), dd = Math.max(0.12, Math.abs(lz1 - lz0))
-      bx(house.group, ww, hh, dd, pw, (lx0 + lx1) / 2, y, (lz0 + lz1) / 2)
-    }
-    // Waist-high partitions, like a real Indian home's half-wall / counter —
-    // they divide the rooms without hiding the bed from the doorway.
-    wall(-4.45, -1.15, -1.30, -1.15, 1.25, 0.625)
-    wall(1.20, -1.15, 4.45, -1.15, 1.25, 0.625)
-    wall(-4.45, 1.6, -2.6, 1.6, 0.95, 0.475)
-  }
+  // No interior partition walls. Earlier passes added half-walls here, but
+  // with no backing structure they read as slabs floating above the floor and
+  // chopped the only room into unusable slivers. The house is one open room
+  // (bed at the back, kitchen corner to the side) — simpler and more real.
   // yard
   const ch = charpai(); ch.position.set(-4.5, 0, 7.6); ch.rotation.y = 0.2; L.add(ch)
   const tul = bush(0.6); tul.position.set(4.6, 0, 5.2); L.add(tul)

@@ -154,18 +154,20 @@ export function bed() {
   const g = new THREE.Group()
   bx(g, 1.5, 0.35, 2.0, wood(), 0, 0, 0)
   bx(g, 1.6, 0.7, 0.1, wood(), 0, 0.35, -1.02) // headboard
-  // A sheet with real wrinkles, not a flat box — this is the wake-up bed.
-  const sh = new THREE.PlaneGeometry(1.4, 1.9, 12, 16)
+  // ONE fitted bedsheet over the whole mattress, with gentle wrinkles. Real
+  // beds do not have two different patterns spliced down the middle.
+  const sh = new THREE.PlaneGeometry(1.42, 1.92, 12, 18)
   const p = sh.attributes.position
-  for (let i = 0; i < p.count; i++) p.setZ(i, 0.018 * Math.sin(p.getX(i) * 9 + p.getY(i) * 3) + 0.01 * Math.sin(p.getY(i) * 11))
+  for (let i = 0; i < p.count; i++) p.setZ(i, 0.016 * Math.sin(p.getX(i) * 9 + p.getY(i) * 3) + 0.01 * Math.sin(p.getY(i) * 11))
   sh.computeVertexNormals()
-  const sheet = new THREE.Mesh(sh, S({ map: tex.cloth('#3a5a7a', '#9ab', 'check'), side: THREE.DoubleSide }))
+  const sheet = new THREE.Mesh(sh, S({ map: tex.cloth('#dfe4e8', '#b7c9d8', 'check'), side: THREE.DoubleSide }))
   sheet.rotation.x = -Math.PI / 2; sheet.position.y = 0.455; g.add(sheet)
-  // folded quilt over the lower half with a rolled lip at the fold
-  const quilt = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 0.95, 8, 8), S({ map: tex.cloth('#8c5a4a', '#d8b89a', 'stripe'), side: THREE.DoubleSide }))
-  quilt.rotation.x = -Math.PI / 2; quilt.position.set(0, 0.475, 0.48); g.add(quilt)
-  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.42, 8), S({ color: '#a8765a' }))
-  lip.rotation.z = Math.PI / 2; lip.position.set(0, 0.49, 0.0); g.add(lip)
+  // A single folded blanket at the FOOT only — same colour family, clearly a
+  // folded layer on top of the sheet, not a second bedsheet.
+  const fold = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.42, 6, 4), S({ map: tex.cloth('#b7c9d8', '#e8eef2', 'stripe'), side: THREE.DoubleSide }))
+  fold.rotation.x = -Math.PI / 2; fold.position.set(0, 0.472, 0.74); g.add(fold)
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.4, 8), S({ color: '#c3d2de' }))
+  lip.rotation.z = Math.PI / 2; lip.position.set(0, 0.485, 0.53); g.add(lip)
   // pillow: squashed sphere with a seam
   const pillow = sph(g, 0.25, S({ color: '#e8e0d0', roughness: 1 }), 0, 0.6, -0.75, 1.45, 0.32, 0.9)
   pillow.castShadow = true

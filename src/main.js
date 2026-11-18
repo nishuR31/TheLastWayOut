@@ -22,8 +22,11 @@ import { mouseCtl } from './core/mouse.js'
 
 const $ = (id) => document.getElementById(id)
 const SKEY = 'tlwo_settings_v1'
-const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, mouselook: 'auto', subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1, playerChar: 'Nishan', keyaid: 'context' }
+const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, mouselook: 'auto', subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1, playerChar: 'Nishan', keyaid: 'off' }
 let S = { ...defaults, ...(() => { try { return JSON.parse(localStorage.getItem(SKEY) || '{}') } catch (e) { return {} } })() }
+// One-time migration: old saves had 'context' as the default, which kept the
+// bottom key hints on screen. Players can still re-enable them in Settings.
+if (S.keyaid === 'context' && !S._keyaidMigrated) { S.keyaid = 'off'; S._keyaidMigrated = true }
 let inGame = false, screenStack = [], pausedNow = false
 
 // ---------- screens ----------
@@ -40,7 +43,7 @@ let backTo = 'menu', charFromMenu = false
 // ---------- settings ----------
 function applySettings() {
   audio.vol.master = +S.master; audio.vol.voice = +S.voice; audio.vol.amb = +S.amb; audio.vol.sfx = +S.sfx; audio.applyVolumes()
-  input.sens = +S.sens; input.mouseMode = S.mouselook || 'auto'; if (input.mouseMode !== 'auto') input.unlock(); document.body.classList.toggle('right-look', input.mouseMode === 'right'); ui.subMode = S.subs; ui.caps = !!S.caps; ui.voiceLang = S.vlang
+  input.sens = +S.sens; input.mouseMode = S.mouselook || 'auto'; if (input.mouseMode !== 'auto') input.unlock(); document.body.classList.toggle('right-look', input.mouseMode === 'right'); document.body.classList.toggle('show-actionbar', input.mouseMode !== 'auto'); ui.subMode = S.subs; ui.caps = !!S.caps; ui.voiceLang = S.vlang
   ui.playerChar = S.playerChar === 'Nishant' ? 'Nishant' : 'Nishan'
   document.querySelectorAll('.cs-card').forEach(c => c.classList.toggle('selected', c.dataset.char === ui.playerChar))
   if (charPreview.select) charPreview.select(ui.playerChar)
