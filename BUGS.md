@@ -1,5 +1,25 @@
 # BUGS / STATUS (honest)
 
+## FIXED — performance / playability pass (2026-11-18)
+Profiled live with CDP (`render` + `G.step` wrapped, CPU sampling profiler):
+- Frame time was almost entirely rendering (~10.4 s/frame under SwiftShader);
+  game logic was only ~5 ms. Build of the `road` level took ~19 s.
+- `src/game.js`: camera far plane 1200→600 m (fog already hides >200 m, horizon
+  silhouette is at 430 m); default graphics profile made cheaper — med pixel
+  ratio 0.85→0.7, density 0.8→0.65, shadows only on `high`, alpha-tested foliage
+  cards hidden on `low`; `setGfx()` only recompiles shaders when shadows actually
+  change (was recompiling every material on every quality change).
+- Added a one-shot FPS watchdog: a single >250 ms frame (or a 3 s window below
+  20 fps) drops resolution/overdraw via `G.dropQuality()` and toasts the player;
+  Settings can restore any tier.
+- `src/world/nature.js`: cheap AABB reject before the 73-segment polyline
+  projection in `scatterForest`, and undergrowth count 0.09→0.06 of area.
+- Measured after: build 19.3 s→15.9 s, draw calls 2059→1755, triangles
+  2.11 M→1.59 M, watchdog engages and switches to `low` with no errors.
+- Note: absolute frame times above are from a CPU-only software WebGL
+  environment; a real GPU is much faster, but the reduced draw calls / far
+  plane / overdraw help everywhere.
+
 ## FIXED — visual walkthrough bugs (2026-11-18, bedroom / opening scene)
 Reproduced live in a headless CDP walkthrough (`?dev=1`, real New Game + real key events).
 - **Trees growing inside the house**: `src/levels/road.js` `side()` returned the

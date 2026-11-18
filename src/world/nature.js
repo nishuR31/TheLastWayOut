@@ -50,9 +50,18 @@ export function scatterForest(G, opts) {
     }
   }
   const noGo = [...(opts.avoid || []), ...houseAvoid]
+  // Cheap AABB reject before the O(segments) polyline projection. With a
+  // 73-point forest trail and ~10k undergrowth samples this was the bulk of
+  // level-build time on slower machines.
+  const trailBoxes = (opts.trails || []).map(t => {
+    let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity
+    for (const p of t.pts) { if (p.x < x0) x0 = p.x; if (p.x > x1) x1 = p.x; if (p.z < z0) z0 = p.z; if (p.z > z1) z1 = p.z }
+    const pad = t.hw + 6
+    return { x0: x0 - pad, z0: z0 - pad, x1: x1 + pad, z1: z1 + pad, t }
+  })
   const farFromTrails = (x, z, m) => {
     const wob = natural ? noise2(x * 0.035, z * 0.035) * 3.6 : 0
-    for (const t of opts.trails || []) { if (nearestOnPoly(t.pts, x, z).d < t.hw + m + wob) return false }
+    for (const b of trailBoxes) if (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1 && nearestOnPoly(b.t.pts, x, z).d < b.t.hw + m + wob) return false
     for (const a of noGo) if (Math.hypot(x - a.x, z - a.z) < a.r) return false
     return true
   }
@@ -90,7 +99,7 @@ export function scatterForest(G, opts) {
     if (wrap && !natural) { const per = wrap.z1 - wrap.z0; place(x, z, per); place(x, z, -per) }
   }
   // undergrowth (ferns, grass cards, bushes)
-  const U = Math.floor(area * 0.09 * G.cfg.density)
+  const U = Math.floor(area * 0.06 * G.cfg.density)
   for (const [x, z] of samplePoints(U, 1.4)) {
     if (!farFromTrails(x, z, 0.5)) continue
     const dzs = wrap ? [0, wrap.z1 - wrap.z0, wrap.z0 - wrap.z1] : [0]

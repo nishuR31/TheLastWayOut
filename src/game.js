@@ -46,7 +46,11 @@ G.init = function (canvas) {
   G.scene = new THREE.Scene()
   G.scene.environment = tex.envMap()
   G.scene.environmentIntensity = 0.55
-  G.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 1200); G.scene.add(G.camera)
+  // Fog (FogExp2 @ 0.02) hides everything past ~200 m. A 1200 m far plane only
+  // makes the renderer chew through hundreds of thousands of invisible forest
+  // triangles. 600 m still clears the horizon silhouette (radius 430) and the
+  // camera-relative sky dome (which pins itself to the far plane).
+  G.camera = new THREE.PerspectiveCamera(70, 1, 0.08, 600); G.scene.add(G.camera)
   // ---- loading screen: its own tiny scene so the progress screen shows a real
   // rotating model instead of a blank background (and so it can animate while
   // level modules and textures are fetched between frames). ----
@@ -99,15 +103,39 @@ G.init = function (canvas) {
   addEventListener('resize', G.resize); G.resize()
   G.setGfx(G.cfg.gfx)
 }
+// Lightweight emergency downgrade used by the FPS watchdog. Unlike setGfx()
+// it does not force a shader recompile (which can itself stall for seconds on
+// software GL), it just drops resolution and the most expensive overdraw.
+G.dropQuality = function () {
+  G.cfg.gfx = 'low'; G.cfg.density = 0.4
+  G.renderer.setPixelRatio(0.5)
+  if (G.scene) G.scene.traverse(o => {
+    if (!o.isMesh || !o.material) return
+    const mats = Array.isArray(o.material) ? o.material : [o.material]
+    if (mats.some(x => x.alphaTest > 0)) o.visible = false
+  })
+}
 G.resize = function () { const w = innerWidth, h = innerHeight; G.renderer.setSize(w, h, false); G.camera.aspect = w / h; G.camera.updateProjectionMatrix() }
 G.setGfx = function (q) {
   G.cfg.gfx = q
-  const pr = { low: 0.6, med: 0.85, high: Math.min(devicePixelRatio, 1.5) }[q]; G.renderer.setPixelRatio(pr)
-  G.cfg.density = { low: 0.55, med: 0.8, high: 1 }[q]; G.cfg.rain = { low: 0.4, med: 0.75, high: 1 }[q]
-  const sh = q !== 'low'
+  // Software renderers (no GPU / SwiftShader / remote desktop) choke on the old
+  // med defaults: 2000+ draw calls and 2M triangles per frame. Keep the scene
+  // readable but make the default profile playable; 'high' keeps the full
+  // shadows + density for people with a real GPU.
+  const pr = { low: 0.5, med: 0.7, high: Math.min(devicePixelRatio, 1.5) }[q]; G.renderer.setPixelRatio(pr)
+  G.cfg.density = { low: 0.4, med: 0.65, high: 1 }[q]; G.cfg.rain = { low: 0.25, med: 0.55, high: 1 }[q]
+  const sh = q === 'high'
+  const shChanged = G.renderer.shadowMap.enabled !== sh
   G.renderer.shadowMap.enabled = sh; G.renderer.shadowMap.type = THREE.PCFSoftShadowMap
-  if (G.env) { G.env.sun.castShadow = sh; const m = q === 'high' ? 2048 : 1024; if (G.env.sun.shadow.mapSize.x !== m) { G.env.sun.shadow.mapSize.set(m, m); if (G.env.sun.shadow.map) { G.env.sun.shadow.map.dispose(); G.env.sun.shadow.map = null } } }
-  if (G.scene) G.scene.traverse(o => { if (o.material) { const a = Array.isArray(o.material) ? o.material : [o.material]; a.forEach(x => x.needsUpdate = true) } })
+  if (G.env) { G.env.sun.castShadow = sh; const m = q === 'high' ? 1024 : 512; if (G.env.sun.shadow.mapSize.x !== m) { G.env.sun.shadow.mapSize.set(m, m); if (G.env.sun.shadow.map) { G.env.sun.shadow.map.dispose(); G.env.sun.shadow.map = null } } }
+  if (G.scene) G.scene.traverse(o => {
+    // Alpha-tested foliage cards (ferns, grass, leaf silhouettes) cost a lot of
+    // overdraw with no real benefit at low resolution.
+    if (o.isMesh && o.material) { const a = Array.isArray(o.material) ? o.material : [o.material]; if (a.some(x => x.alphaTest > 0)) o.visible = q !== 'low' }
+    // Recompiling every material stalls for seconds on software GL — only do it
+    // when the shadow define actually changed.
+    if (shChanged && o.material) { const a = Array.isArray(o.material) ? o.material : [o.material]; a.forEach(x => x.needsUpdate = true) }
+  })
 }
 
 // ---------------- timing ----------------
@@ -464,7 +492,19 @@ let last = 0, acc = 0
 G.start = function () { G.running = true; last = performance.now(); requestAnimationFrame(loop) }
 function loop(now) {
   requestAnimationFrame(loop)
-  let dt = Math.min(0.05, (now - last) / 1000); last = now
+  const raw = (now - last) / 1000
+  let dt = Math.min(0.05, raw); last = now
+  // FPS watchdog: one-shot auto downgrade so a weak / software GPU can still
+  // play instead of spending all its time generating and rasterising models.
+  if (G.level && !G.paused && !G.fastSim && raw > 0 && raw < 30 && !G._qaDone && G.cfg.gfx !== 'low') {
+    const qa = G._qa || (G._qa = { t: 0, n: 0 })
+    qa.t += raw; qa.n++
+    // React to a single pathological frame (>250 ms) or a 3 s window <20 fps.
+    if (qa.t >= 3 || raw > 0.25) {
+      if (qa.n / qa.t < 20) { G.dropQuality(); ui.toast('Graphics lowered automatically for smoother play · Settings to restore', 5) }
+      G._qaDone = true
+    }
+  }
   if (!G.running) return
   // Splash, loading, character select and the main menu sit over an opaque
   // background and no level exists yet — rendering an empty scene every frame
