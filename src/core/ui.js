@@ -70,6 +70,8 @@ class UI {
   flash(a = 0.8) { if (this.reduceFlash) a *= 0.2; const f = $('flash'); f.style.transition = 'none'; f.style.opacity = a; void f.offsetWidth; f.style.transition = 'opacity .5s ease-out'; f.style.opacity = 0 }
   fear(v) { $('fear').style.opacity = Math.min(1, v) }
   async titleCard(ch, title, time, sec = 3.2) {
+    // A streamed chapter has no cut to announce — the world just continued.
+    if (this.G && this.G._streamedChapter) { this.G._streamedChapter = false; return }
     $('tc-chapter').textContent = ch; $('tc-title').textContent = title; $('tc-time').textContent = time || ''
     const t = $('titlecard'); t.style.transition = 'none'; t.style.opacity = 1; this.show('titlecard', true)
     await sleep(Math.min(sec, 2.6) * 1000)

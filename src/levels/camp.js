@@ -9,9 +9,11 @@ import { R } from '../core/util.js'
 
 export function build(G, opts = {}) {
   G.env.set(opts.env || 'day', true)
-  const entry = [[0, -34], [0, 14], [2, 40], [0, 60]]
+  // The entry bends through the trees instead of cutting straight across an
+  // open field — the board should feel like a threshold into the forest.
+  const entry = [[0, -34], [2, -18], [-3, -2], [4, 18], [-2, 38], [0, 60]]
   const toBamboo = [[0, 60], [-22, 80], [-46, 104]]
-  const L = forestLevel(G, { name: 'camp', trails: [{ pts: entry, hw: 2.4, name: 'entry' }, { pts: toBamboo, hw: 1.8, name: 'toBamboo' }], bounds: [-110, -40, 110, 160], density: 0.02, seed: 71, groundSize: [320, 320, 0, 60], avoid: [{ x: 0, z: 62, r: 17 }, { x: 36, z: 92, r: 8 }, { x: -30, z: 100, r: 14 }], freeRoam: { stray: 60, pits: 8 } })
+  const L = forestLevel(G, { name: 'camp', trails: [{ pts: entry, hw: 2.2, name: 'entry' }, { pts: toBamboo, hw: 1.8, name: 'toBamboo' }], bounds: [-110, -40, 110, 160], density: 0.032, seed: 71, groundSize: [320, 320, 0, 60], avoid: [{ x: 0, z: 62, r: 17 }, { x: 36, z: 92, r: 8 }, { x: -30, z: 100, r: 14 }], freeRoam: { stray: 60, pits: 8 } })
   L.entryPts = L.trails[0].pts
   clearing(L, 0, 62, 16, 'camp', 'mud', 5)
   // entry signboards
@@ -38,6 +40,13 @@ export function build(G, opts = {}) {
   const sal = makeSiris(1.9); sal.position.set(38, 0, 94); L.add(sal); L.walk.circle(38, 94, 0.7); L.refs.salTree = new THREE.Vector3(38, 0, 94)
   const cols = ['#2a2a2e', '#a37a1d', '#1d4a7a']
   cols.forEach((c, i) => { const bk = motorbike(c); bk.position.set(33 + i * 1.5, 0, 90 - i * 0.8); bk.rotation.y = 0.5 + i * 0.1; L.add(bk); L.walk.circle(bk.position.x, bk.position.z, 0.7); bk.userData.crew = true; (L.refs.crewBikes = L.refs.crewBikes || []).push(bk) })
+  // Two more visitors' bikes right by the approach, with their owners spawned
+  // in ch2 — so the place is already inhabited when the player walks in.
+  L.refs.visitorBikes = []
+  ;[[-6.5, 46, 0.8], [6.2, 50, -0.5]].forEach(([x, z, ry], i) => {
+    const bk = motorbike(cols[i % cols.length]); bk.position.set(x, 0, z); bk.rotation.y = ry
+    L.add(bk); L.walk.circle(x, z, 0.7); L.refs.visitorBikes.push(bk)
+  })
   L.refs.bikePos = new THREE.Vector3(36.5, 0.8, 92.5)
   G.addScooter(L, 36.5, 92.5, 2.1); G.scooter.park()
   L.spawn = { x: 0, z: -20, yaw: 0 }

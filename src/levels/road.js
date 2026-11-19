@@ -24,7 +24,9 @@ export function build(G, opts = {}) {
   L.ground(1300, 760, 'grass', 7, 380, 40, 0xe0e8d0)
   // the carriageway: a 2-lane lane by the house, a 4-lane city road through town, then back down to 2 lanes into the forest
   const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z))
-  const hwAt = (d) => d < 140 ? 4.2 : d < 200 ? 4.2 + (d - 140) / 60 * 2.6 : d < 440 ? 6.8 : d < 520 ? 6.8 - (d - 440) / 80 * 3.4 : 3.4
+  // Four lanes out of the busy home city, narrowing to two, then a single
+  // forest lane — the width change is gradual, not a sudden step.
+  const hwAt = (d) => d < 120 ? 7.4 : d < 220 ? 7.4 - (d - 120) / 100 * 3.4 : d < 520 ? 4.0 : d < 620 ? 4.0 - (d - 520) / 100 * 1.0 : 3.0
   L.hwAt = hwAt
   L.ribbon(pts, (i) => hwAt(cum[i]), 'road', 6, 0.012, 0xffffff, false)
   L.ribbon(pts.map(p => ({ x: p.x, z: p.z - 0.02 })), (i) => hwAt(cum[i]) + 1.5, 'mud', 4, 0.006, 0xffffff, false)
@@ -38,9 +40,9 @@ export function build(G, opts = {}) {
     for (let d = d0; d < d1 && c < n; d += step) { const a2 = ptAt(pts, d), off = offFn(d); e4.set(0, a2.yaw, 0); q4.setFromEuler(e4); p4.set(a2.x - Math.cos(a2.yaw) * off, 0.014, a2.z + Math.sin(a2.yaw) * off); im.setMatrixAt(c++, m4.compose(p4, q4, s4)) }
     im.count = c; im.instanceMatrix.needsUpdate = true; im.frustumCulled = false; L.add(im)
   }
-  mark(() => 0, 3, 200, 7, 2.4, '#e8e2c8'); mark(() => 0, 440, len - 3, 8, 2.6, '#e8e2c8')            // dashed centre, 2-lane roads
-  mark(() => 0.14, 200, 440, 3.2, 3.2, '#d8b020'); mark(() => -0.14, 200, 440, 3.2, 3.2, '#d8b020')   // double yellow, 4-lane
-  mark(() => 3.5, 200, 440, 9, 3, '#e8e2c8'); mark(() => -3.5, 200, 440, 9, 3, '#e8e2c8')              // lane dashes
+  mark(() => 0, 130, 520, 7, 2.4, '#e8e2c8'); mark(() => 0, 630, len - 3, 8, 2.6, '#e8e2c8')          // dashed centre, 2-lane stretches
+  mark(() => 0.14, 4, 120, 3.2, 3.2, '#d8b020'); mark(() => -0.14, 4, 120, 3.2, 3.2, '#d8b020')       // double yellow, 4-lane city stretch
+  mark(() => 3.5, 4, 120, 9, 3, '#e8e2c8'); mark(() => -3.5, 4, 120, 9, 3, '#e8e2c8')                 // lane dashes
   mark((d) => hwAt(d) - 0.4, 3, len - 3, 3.2, 3.2, '#e8e2c8', 0.14); mark((d) => -(hwAt(d) - 0.4), 3, len - 3, 3.2, 3.2, '#e8e2c8', 0.14)   // edge lines
   const la = pts[pts.length - 1], lb = pts[pts.length - 2], ll = Math.hypot(la.x - lb.x, la.z - lb.z) || 1
   const ext = [...pts, { x: la.x + (la.x - lb.x) / ll * 45, z: la.z + (la.z - lb.z) / ll * 45 }]
@@ -248,6 +250,32 @@ export function build(G, opts = {}) {
 
   // ---- the forest edge: the mossy board (d = len - 75) ----
   { const sg = signboard('JUNGLE RESERVE\nENTRY ALLOWED TILL 5:00 PM', '#3a5a34', '#f2f0e0', 3.2, 1.3); const s = put(sg, len - 75, 7.0); sg.rotation.z = 0.04; L.refs.edge = new THREE.Vector3(s.x, 1.2, s.z) }
+
+  // ---- yellow kaccha spur on the right, toward the forest camp ----
+  {
+    const s0 = side(len - 96, hwAt(len - 96) + 0.6)
+    const spur = smoothPts([[s0.x, s0.z], [s0.x + 9, s0.z + 7], [s0.x + 19, s0.z + 19], [s0.x + 27, s0.z + 36]], 6)
+    L.ribbon(spur, () => 2.9, 'mud', 5, 0.013, 0xd8b060, false)
+    L.walk.corridor(spur, 2.9, 'kaccha')
+    L.kaccha = spur
+    for (const q of [spur[6], spur[14]]) {
+      if (!q) continue
+      const st = teaStall(); st.position.set(q.x + 3.6, 0, q.z); st.rotation.y = -0.5; L.add(st)
+    }
+    const gate = G.addActor('chaiwala'); gate.place(s0.x + 2.4, s0.z + 2, Math.PI); gate.sfx = false
+    const guard1 = G.addActor('farmer'); guard1.place(s0.x + 6, s0.z + 6, -0.8); guard1.sfx = false
+    const guard2 = G.addActor('farmer'); guard2.place(s0.x - 2, s0.z + 8, 0.6); guard2.sfx = false
+    G.addInteract({ pos: new THREE.Vector3(s0.x + 2.4, 1, s0.z + 2), label: 'Gatekeeper se baat karo · Talk to the gatekeeper', r: 3, cone: -1, once: false,
+      onUse: () => G.ui.say('Gatekeeper', 'Andar jaana hai toh isi kacche raaste se jao. Bike yahin chhod do.', 'Take this dirt track to go in. Leave the bike here.', { pos: gate.pos }) })
+    // Dry twigs on the track — visible markers for the way back.
+    for (let i = 0; i < 24; i++) {
+      const q = spur[Math.floor(R.range(1, spur.length - 1))]
+      if (!q) continue
+      const tw = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.022, R.range(0.3, 0.7), 5), new THREE.MeshStandardMaterial({ color: '#8a6a42', roughness: 1 }))
+      tw.rotation.set(Math.PI / 2, R.range(0, 6.28), 0)
+      tw.position.set(q.x + R.range(-2.4, 2.4), 0.05, q.z + R.range(-2.4, 2.4)); L.add(tw)
+    }
+  }
 
   makeTraffic(L, G, ext, { count: 14, lanesAt: (d) => hwAt(Math.max(0, d)) > 5.2 ? [1.8, 5.3] : [1.8], obstacles: [{ d: 215, lat: 2.2, len: 7.5 }] })
   placePits(L, G)

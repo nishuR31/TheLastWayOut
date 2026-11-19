@@ -306,7 +306,7 @@ export async function ch13a(s) {
   G.clockRate = 0
   await startScene(2)
   ui.titleCard('ENDING A', 'Ghar', '', 3)
-  G.player.pos.set(L.spawn.x, 0, L.spawn.z)
+  if (!G._streamed) G.player.pos.set(L.spawn.x, 0, L.spawn.z)
   await wait(0.8)
   await say('Mummy', 'Beta! Dono ko dekho... ye kya haal bana rakha hai!', 'Look at you both! What state are you in!', { pos: mom.pos, dur: 3.4 })
   await N('Mummy... ghar aa gaye.', 'Mom... we\'re home.', { dur: 2.4 })

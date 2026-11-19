@@ -107,12 +107,17 @@ export const items = {
     if (t.helmet) {
       const hs = (t.obj.userData.helmets) || []
       if (!G.hasHelmet) {
-        G.hasHelmet = true; G.itemTaken = G.itemTaken || {}; G.itemTaken.helmet = true; hs.forEach(h => { h.visible = false })
-        audio.clang({ x: t.x, y: 1.4, z: t.z }, 0.5)
-        ui.toast('Dono helmet le liye [ic:helmet] · Took both helmets', 2.6)
+        G.itemTaken = G.itemTaken || {}; G.itemTaken.helmet = true
+        G.helmetAnim && G.helmetAnim(true, () => {
+          G.hasHelmet = true; hs.forEach(h => { h.visible = false })
+          audio.clang({ x: t.x, y: 1.4, z: t.z }, 0.5)
+        }).then(() => ui.toast('Dono helmet le liye [ic:helmet] · Took both helmets', 2.6))
       } else {
-        G.hasHelmet = false; G.itemTaken = G.itemTaken || {}; G.itemTaken.helmet = false; hs.forEach(h => { h.visible = true })
-        audio.click(); ui.toast('Helmet rack par rakh diye · Helmets back on the rack', 2.6)
+        G.itemTaken = G.itemTaken || {}; G.itemTaken.helmet = false
+        G.helmetAnim && G.helmetAnim(false, () => {
+          G.hasHelmet = false; hs.forEach(h => { h.visible = true })
+          audio.click()
+        }).then(() => ui.toast('Helmet rack par rakh diye · Helmets back on the rack', 2.6))
       }
       this.reconcile(G)
       return

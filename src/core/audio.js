@@ -218,6 +218,36 @@ class AudioEngine {
     if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.4); this.caption('[a whisper]', 2)
     for (let i = 0; i < n; i++) this._burst(this.nWhite, 'bandpass', 2500 + Math.random() * 3500, 1.4, 0.09 + Math.random() * 0.06, 0.1, o, t + i * 0.14 + Math.random() * 0.05, 0.02)
   }
+  // a person clearing their throat just out of sight — the "someone is here" tell
+  cough(pos, n = 2) {
+    if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busVoice, 0.35); this.caption('[someone coughs nearby]', 2.4)
+    for (let i = 0; i < n; i++) {
+      const tt = t + i * (0.34 + Math.random() * 0.12)
+      const f = this._burst(this.nPink, 'bandpass', 780 + Math.random() * 320, 1.1, 0.17, 0.34, o, tt, 0.008)
+      f.frequency.setValueAtTime(1200, tt); f.frequency.exponentialRampToValueAtTime(560, tt + 0.17)
+      this._burst(this.nWhite, 'highpass', 2400, 0.8, 0.08, 0.1, o, tt + 0.02, 0.006)
+      this._tone(150, 95, 0.12, 'sawtooth', 0.09, o, tt)
+    }
+  }
+  // snake: a dry hiss with a rattling tail, usually right by the player's foot
+  snake(pos) {
+    if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(pos, this.busSfx, 0.3); this.caption('[a snake hisses in the grass]', 2.6)
+    const f = this._burst(this.nWhite, 'bandpass', 5200, 1.6, 1.1, 0.24, o, t, 0.09)
+    f.frequency.setValueAtTime(6400, t); f.frequency.linearRampToValueAtTime(3800, t + 1.1)
+    for (let i = 0; i < 11; i++) this._burst(this.nWhite, 'bandpass', 1700 + Math.random() * 900, 8, 0.018, 0.16, o, t + 0.18 + i * 0.062, 0.002)
+  }
+  windGust(v = 1) {
+    if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(null, this.busAmb, 0.2); this.caption('[a gust tears through the trees]', 2.6)
+    const f = this._burst(this.nPink, 'bandpass', 420, 0.7, 1.6, 0.34 * v, o, t, 0.35)
+    f.frequency.setValueAtTime(300, t); f.frequency.linearRampToValueAtTime(1100, t + 0.8); f.frequency.linearRampToValueAtTime(380, t + 1.6)
+    this._burst(this.nBrown, 'lowpass', 260, 0.9, 1.7, 0.22 * v, o, t, 0.4)
+  }
+  rainSwell(v = 1) {
+    if (!this.ctx) return; const t = this.ctx.currentTime, o = this._out(null, this.busAmb, 0.15); this.caption('[rain hammers down]', 2.8)
+    const f = this._burst(this.nWhite, 'highpass', 700, 0.8, 2.4, 0.16 * v, o, t, 0.28)
+    f.frequency.setValueAtTime(1400, t); f.frequency.linearRampToValueAtTime(500, t + 2.4)
+    for (let i = 0; i < 6; i++) this._burst(this.nPink, 'bandpass', 2600, 1.2, 0.12, 0.09 * v, o, t + 0.2 + i * 0.31, 0.02)
+  }
   puff(pan = 1) {
     if (!this.ctx) return; const c = this.ctx, t = c.currentTime, p = c.createStereoPanner ? c.createStereoPanner() : this._g(1); if (p.pan) p.pan.value = pan; p.connect(this.busSfx); this.caption('[a cold puff of air near the ear]', 2.5)
     this._burst(this.nPink, 'bandpass', 3200, 0.9, 0.55, 0.28, p, t, 0.12); this._burst(this.nWhite, 'highpass', 5000, 1, 0.35, 0.06, p, t + 0.05, 0.1)

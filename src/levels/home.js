@@ -10,13 +10,15 @@ import { teaStall, wires as wiresFn } from '../world/build.js'
 
 // everything that makes the house and its lane: reusable inside the long road level (o.inRoad)
 export function populateHome(G, L, night, o = {}) {
-  L.walk.rect(-7, 3.5, 7, 11.2, 'yard')
-  L.walk.rect(-9, 10, 12, 18, 'street2')
+  L.walk.rect(-7, 3.5, 7, 6.6, 'yard')
+  L.walk.rect(-9, 8.6, 12, 21.4, 'street2')
+  const woodM = withPBR(new THREE.MeshStandardMaterial({ map: tex.wood('#6b4a30') }))
+  const metalM = withPBR(new THREE.MeshStandardMaterial({ color: '#b8bcc0', metalness: 0.7, roughness: 0.3 }))
   // our house
-  const house = buildHouse(L, { x: 0, z: 0, w: 9, d: 6, h: 3.1, col: '#e3d3a8', roof: 'flat', floor: 'tile', doorX: 0.6, doorW: 1.2, closedDoor: false, name: 'home',
+  const house = buildHouse(L, { x: 0, z: -10, w: 20, d: 14, h: 3.2, col: '#e3d3a8', roof: 'flat', floor: 'tile', doorX: 2.4, doorW: 1.3, closedDoor: false, name: 'home',
     windows: [{ side: 's', x: -2.6, y: 1.2, w: 1.1, h: 1.0, lit: true }, { side: 's', x: 3.0, y: 1.2, w: 1.1, h: 1.0, lit: true }, { side: 'n', x: 0, y: 1.2, w: 1.2, h: 1.0, lit: true }] })
   L.house = house
-  L.surface = (x, z) => (house.inside(x, z) ? 'tile' : (z > 10.8 && z < 19.2 ? 'road' : (z < 3.4 ? 'tile' : 'dirt')))
+  L.surface = (x, z) => (house.inside(x, z) ? 'tile' : (z > 8.6 && z < 21.4 ? 'road' : (z < 3.4 ? 'tile' : 'dirt')))
   house.addLight(0, 2.5, 0, night ? '#ffe2b0' : '#ffeccb', night ? 14 : 9, 14)
   house.addLight(-3, 2.5, -1.5, '#ffe2b0', 6, 8)
   tubeLight(L, house.group, 0, 3.05, 0)
@@ -29,28 +31,33 @@ export function populateHome(G, L, night, o = {}) {
   house.place(shelf(), 4.1, 0.2, 0, -Math.PI / 2)
   house.place(garlandedPhoto(), -4.2, -1.0, 1.55, Math.PI / 2)
   // the bed you wake up in (final script: phone face-up on the bed, helmets by the door)
-  const bedObj = bed(); house.place(bedObj, -3.5, -2.0, 0, 0); L.refs.bedPos = house.local(-2.9, 0.7, -2.0)
-  const phoneOnBed = makePhone(); house.place(phoneOnBed, -3.2, 0.7, -2.0)
+  // Bed flush against the left and back walls; phone face-up beside the pillow.
+  const bedObj = bed(); house.place(bedObj, -4.0, -4.5, 0, 0); L.refs.bedPos = house.local(-3.4, 0.7, -4.5)
+  const phoneOnBed = makePhone(); house.place(phoneOnBed, -3.7, 0.72, -4.5)
   // The opening beat, from the script: "sunlight through a thin curtain" and
   // the phone face-up on the bed. Helmets live in ONE place — the rack by the
   // door (below) — not duplicated on a chair.
   // A real window behind the curtain, with a warm pane and a frame.
   const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.1), new THREE.MeshBasicMaterial({ color: '#ffe6b8' }))
-  pane.position.set(-3.5, 1.75, -3.09); pane.rotation.y = Math.PI; house.group.add(pane)
+  pane.position.set(-4.0, 1.75, -6.95); pane.rotation.y = Math.PI; house.group.add(pane)
   for (const [fw, fh, fx, fy] of [[1.62, 0.06, 0, 2.32], [1.62, 0.06, 0, 1.18], [0.06, 1.2, -0.78, 1.75], [0.06, 1.2, 0.78, 1.75], [0.04, 1.1, 0, 1.75]]) {
-    bx(house.group, fw, fh, 0.08, new THREE.MeshStandardMaterial({ color: '#7a6242' }), -3.5 + fx, fy, -3.1)
+    bx(house.group, fw, fh, 0.08, new THREE.MeshStandardMaterial({ color: '#7a6242' }), -4.0 + fx, fy, -6.96)
   }
   // Corrugated curtain: real folds cut into a subdivided plane.
   const cg = new THREE.PlaneGeometry(1.55, 1.65, 20, 1), cp = cg.attributes.position
   for (let i = 0; i < cp.count; i++) cp.setZ(i, 0.05 * Math.sin((cp.getX(i) + 0.775) * Math.PI * 7))
   cg.computeVertexNormals()
   const curtain = new THREE.Mesh(cg, new THREE.MeshStandardMaterial({ color: '#e8dcc0', roughness: 1, side: THREE.DoubleSide, transparent: true, opacity: 0.92 }))
-  curtain.position.set(-3.5, 1.75, -2.98); curtain.rotation.y = Math.PI; house.group.add(curtain)
+  curtain.position.set(-4.0, 1.75, -6.84); curtain.rotation.y = Math.PI; house.group.add(curtain)
   // A soft patch of morning sun on the floor, under the window.
   const patch = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), new THREE.MeshBasicMaterial({ color: '#ffe0a0', transparent: true, opacity: 0.16, depthWrite: false }))
-  patch.rotation.x = -Math.PI / 2; patch.position.set(-3.4, 0.02, -1.55); house.group.add(patch)
-  const bedChair = chair(); bedChair.scale.setScalar(1.25); house.place(bedChair, -2.1, -2.5, 0, 0.3)
-  const sideTable = table(0.5, 0.4, 0.5); house.place(sideTable, -4.1, -1.6, 0, 0)
+  patch.rotation.x = -Math.PI / 2; patch.position.set(-4.0, 0.02, -4.6); house.group.add(patch)
+  const bedChair = chair(); bedChair.scale.setScalar(1.15); house.place(bedChair, -2.3, -3.3, 0, 0.3)
+  const sideTable = table(0.5, 0.4, 0.5); house.place(sideTable, -2.7, -5.6, 0, 0)
+  // a wall socket and charging cable by the bedside table
+  bx(house.group, 0.22, 0.16, 0.04, metalM, -5.0, 0.5, -5.6).rotation.y = Math.PI / 2
+  const cable = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 5, 14, Math.PI), metalM)
+  cable.position.set(-4.85, 0.54, -5.6); cable.rotation.set(Math.PI / 2, 0, 0); house.group.add(cable)
   // kitchen corner
   house.place(chulha(), -4.0, 0.1, 0, 0)
   house.place(table(1.3, 0.7, 0.8), -2.9, 0.4, 0, 0)
@@ -58,44 +65,118 @@ export function populateHome(G, L, night, o = {}) {
   const gl1 = makeSteelGlass(); house.place(gl1, -2.5, 0.5, 0.8)
   house.place(stool(), -3.7, 1.0, 0, 0.5); house.place(stool(), -2.1, 1.1, 0, 0.2)
   const mt = matka(); house.place(mt, -4.0, 2.4, 0, 0)
-  const rack = helmetRack(); house.place(rack, 3.9, 2.6, 0, 0)
+  const rack = helmetRack()
+  for (const x of [-0.24, 0.24]) bx(rack, 0.08, 1.4, 0.08, woodM, x, 0, 0) // grounded stand
+  house.place(rack, 3.9, 2.6, 0, 0)
   const hook = keyHook(); house.place(hook, 4.38, 1.1, 1.45, -Math.PI / 2); L.refs.keyHook = house.local(4.3, 1.45, 1.1)
   L.refs.helmetPos = house.local(3.9, 1.3, 2.4); L.refs.rack = rack
   // phone now starts on the low coffee table by the sofa, not the kitchen table
   L.refs.homeTable = house.local(2.4, 0.75, -0.8)
   L.refs.tiffinPos = house.local(-2.9, 0.9, 0.4)
   L.refs.tiffin = tiffin
-  // No interior partition walls. Earlier passes added half-walls here, but
-  // with no backing structure they read as slabs floating above the floor and
-  // chopped the only room into unusable slivers. The house is one open room
-  // (bed at the back, kitchen corner to the side) — simpler and more real.
+  // ---- five rooms with FULL-HEIGHT walls that start at the floor ----
+  // Local plan: back-left boys' room (bed), back-middle family room (sofa,
+  // TV), back-right parents' room; front-left Chacha, front-middle hall,
+  // front-right spare room. Door gaps are left in every partition.
+  const iw = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#d8c6a0') }))
+  const part = (x0, z0, x1, z1) => {
+    bx(house.group, Math.abs(x1 - x0) || 0.16, 3.2, Math.abs(z1 - z0) || 0.16, iw, (x0 + x1) / 2, 0, (z0 + z1) / 2)
+  }
+  part(-5, -7, -5, -1.2); part(-5, -0.2, -5, 7)     // left partition, bedroom door gap
+  part(5, -7, 5, -1.2); part(5, -0.2, 5, 7)         // right partition, parents' door gap
+  part(-10, 0, -2.2, 0); part(2.2, 0, 10, 0)         // cross wall, wide central opening into the hall
+  const roomDoor = (x, z, ry) => {
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.2, 0.06), woodM); leaf.position.set(0.45, 1.1, 0); g.add(leaf)
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), metalM); knob.position.set(0.78, 1.1, 0.06); g.add(knob)
+    house.group.add(g)
+  }
+  roomDoor(-5, -1.15, Math.PI / 2); roomDoor(5, -1.15, -Math.PI / 2)
+  // Room furniture, so each space reads as lived in.
+  house.place(bed(), 8.8, -4.5, 0, 0)                       // parents' bed against the right wall
+  house.place(charpai(), -7.6, 3.4, 0, 0)                   // Chacha's cot
+  house.place(table(1.1, 0.7, 0.6), 7.4, 3.4, 0, 0)         // spare room
+  house.place(stool(), 8.6, 3.6, 0, 0)
+  // ---- furniture that makes each room feel lived in ----
+  house.place(table(1.0, 0.6, 0.72), -7.4, -5.0, 0, 0)      // boys' study table
+  house.place(chair(), -7.4, -4.0, 0, 0)
+  // wardrobes sit flush against the walls — no more intersecting shelves
+  bx(house.group, 0.55, 2.0, 1.6, woodM, -9.72, 0, -4.8)
+  bx(house.group, 0.55, 2.0, 1.6, woodM, 9.72, 0, -5.0)
+  // chest of drawers by the bed
+  bx(house.group, 0.85, 0.8, 0.45, woodM, -2.4, 0, -6.5)
+  for (let i = 0; i < 3; i++) bx(house.group, 0.7, 0.2, 0.02, woodM, -2.4, 0.1 + i * 0.24, -6.26)
+  house.place(table(0.9, 0.5, 0.7), 6.2, -6.5, 0, 0)        // parents' dressing table
+  house.place(table(1.8, 1.0, 0.75), -1.0, 3.0, 0, 0)       // hall dining table
+  for (const [x, z] of [[-2.3, 2.0], [0.3, 2.0], [-2.3, 4.0], [0.3, 4.0]]) house.place(chair(), x, z, 0, 0)
+  house.place(matka(), -8.2, 5.8, 0, 0)                     // water in Chacha's room
+  bx(house.group, 0.35, 1.8, 1.2, woodM, 8.6, 0, 5.6)      // flush wall cabinet, no intersection
+  house.place(matka(), 6.6, 5.8, 0, 0)
+  house.place(stool(), -7.0, -1.6, 0, 0)                    // side stool by the boys' bed
+  // ---- smaller household props, kept against walls and in corners ----
+  const clockFace = new THREE.Mesh(new THREE.CircleGeometry(0.2, 16), withPBR(new THREE.MeshStandardMaterial({ color: '#f2ead6' })))
+  clockFace.position.set(0, 2.4, -6.94); house.group.add(clockFace)
+  for (const [x, y] of [[-2, 1.9], [2, 1.9]]) {
+    const fr = bx(house.group, 0.3, 0.4, 0.03, woodM, x, y, -6.94)
+    bx(house.group, 0.22, 0.3, 0.01, metalM, x, y + 0.04, -6.91)
+  }
+  house.place(bush(0.4), -4.4, 5.8, 0, 0)                   // plant in the hall corner
+  const stand = cyl(house.group, 0.16, 0.2, 0.6, woodM, 4.5, 0, 6.0, 8)
+  for (let i = 0; i < 2; i++) cyl(house.group, 0.015, 0.015, 0.9, metalM, 4.4 + i * 0.1, 0.5, 6.0, 6)
+  for (let i = 0; i < 3; i++) bx(house.group, 0.3, 0.16, 0.28, woodM, 4.3 + i * 0.34, 0, 5.2)
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.6), withPBR(new THREE.MeshStandardMaterial({ color: '#8a5a3a', roughness: 1 })))
+  rug.rotation.x = -Math.PI / 2; rug.position.set(-3.2, 0.02, 3.2); house.group.add(rug)
+  house.place(matka(), 8.8, 5.8, 0, 0)
+  house.place(makeSteelGlass(), 6.6, 6.85, 0, 0)
+  tubeLight(L, house.group, -7.5, 3.05, -4.5)
+  // ---- kitchen and bathroom are their own small buildings behind the house ----
+  buildHouse(L, { x: 14, z: -10, w: 5, d: 5, h: 2.8, roof: 'flat', interior: false, col: '#d0bb92', name: 'kitchen' })
+  buildHouse(L, { x: -14, z: -10, w: 5, d: 5, h: 2.8, roof: 'flat', interior: false, col: '#bfc8ba', name: 'bathroom' })
+  // modern kitchen: counter, sink, tap, cabinets and stove
+  bx(L.group, 2.8, 0.9, 0.65, woodM, 14, 0, -11.6)
+  bx(L.group, 2.8, 0.06, 0.7, metalM, 14, 0.9, -11.6)
+  bx(L.group, 0.7, 0.16, 0.5, metalM, 13.3, 0.83, -11.55)
+  cyl(L.group, 0.025, 0.025, 0.32, metalM, 13.3, 0.95, -11.8, 8)
+  bx(L.group, 1.1, 0.7, 0.32, woodM, 15.2, 1.6, -11.8)
+  const kc = chulha(); kc.position.set(14, 0, -8.8); L.add(kc)
+  // bathroom: sink, tap, mirror and toilet
+  bx(L.group, 0.8, 0.45, 0.6, metalM, -14, 0, -11.5)
+  cyl(L.group, 0.03, 0.03, 0.35, metalM, -14, 0.45, -11.7, 8)
+  bx(L.group, 0.8, 0.55, 0.04, metalM, -14, 1.5, -12.35)
+  bx(L.group, 0.52, 0.42, 0.66, metalM, -15, 0, -9.5)
+  cyl(L.group, 0.28, 0.28, 0.06, metalM, -15, 0.42, -9.5, 14)
+  const bucket = matka(); bucket.position.set(-13.3, 0, -9.2); L.add(bucket)
+  G.addInteract({ pos: new THREE.Vector3(-14, 1, -10.5), label: 'Brush / freshen up · E', r: 2.8, cone: -1, once: false,
+    onUse: () => {
+      // no camera cut — just the sound and caption, then control returns
+      if (G.audio && G.audio.gulp) G.audio.gulp(1)
+      G.ui.caption('[cold water, a quick brush, the mirror fogs over]', 3)
+      G.ui.toast('Fresh · refreshed', 2.4)
+    } })
   // yard
-  const ch = charpai(); ch.position.set(-4.5, 0, 7.6); ch.rotation.y = 0.2; L.add(ch)
+  const ch = charpai(); ch.position.set(-4.5, 0, 4.5); ch.rotation.y = 0.2; L.add(ch)
   const tul = bush(0.6); tul.position.set(4.6, 0, 5.2); L.add(tul)
   cyl(L.group, 0.28, 0.22, 0.4, withPBR(new THREE.MeshStandardMaterial({ map: tex.mudwall() })), 4.6, 0, 5.2, 10)
   const mt2 = matka(); mt2.position.set(-5.5, 0, 5); L.add(mt2)
   // gate wall
   const wall = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#cdbd96') }))
-  bx(L.group, 6.6, 1.2, 0.2, wall, -3.7, 0, 11.6); bx(L.group, 6.6, 1.2, 0.2, wall, 6.1, 0, 11.6); L.solid(-7, 11.5, -0.4, 11.75, 1.2); L.solid(2.8, 11.5, 9.4, 11.75, 1.2)
-  bx(L.group, 0.3, 1.5, 0.3, wall, -0.4, 0, 11.6); bx(L.group, 0.3, 1.5, 0.3, wall, 2.8, 0, 11.6)
+  bx(L.group, 17.1, 1.2, 0.2, wall, -8.95, 0, 6.5); bx(L.group, 14.7, 1.2, 0.2, wall, 10.15, 0, 6.5); L.solid(-17.5, 6.4, -0.4, 6.65, 1.2); L.solid(2.8, 6.4, 17.5, 6.65, 1.2)
+  bx(L.group, 0.3, 1.5, 0.3, wall, -0.4, 0, 6.5); bx(L.group, 0.3, 1.5, 0.3, wall, 2.8, 0, 6.5)
   // compound boundary: low walls round the yard, with a clear gap at the front door
   {
     const bwl = withPBR(new THREE.MeshStandardMaterial({ map: tex.plaster('#cbb994') }))
-    bx(L.group, 0.22, 1.05, 8.3, bwl, -7.2, 0, 7.4)
-    bx(L.group, 0.22, 1.05, 8.3, bwl, 7.2, 0, 7.4)
-    bx(L.group, 6.9, 1.05, 0.22, bwl, -3.75, 0, 3.35)
-    bx(L.group, 5.4, 1.05, 0.22, bwl, 4.5, 0, 3.35)
-    L.solid(-7.3, 3.3, -7.1, 11.5, 1.05); L.solid(7.1, 3.3, 7.3, 11.5, 1.05)
-    L.solid(-7.3, 3.3, -0.4, 3.5, 1.05); L.solid(1.8, 3.3, 7.3, 3.5, 1.05)
+    bx(L.group, 0.22, 1.05, 23.5, bwl, -17.5, 0, -5.25)
+    bx(L.group, 0.22, 1.05, 23.5, bwl, 17.5, 0, -5.25)
+    L.solid(-17.6, -17, -17.4, 6.5, 1.05); L.solid(17.4, -17, 17.6, 6.5, 1.05)
   }
   // the front gate (on the road side): two iron leaves that swing open towards the street when anyone gets near
   { const iron = new THREE.MeshStandardMaterial({ color: '#2f3a34', roughness: 0.6, metalness: 0.6 })
-    const leaf = (hx, dir) => { const piv = new THREE.Group(); piv.position.set(hx, 0, 11.6); const lf = new THREE.Group(); lf.position.x = dir * 0.8; lf.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.05), iron)); lf.children[0].position.y = 1.15; const b2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.05), iron); b2.position.y = 0.25; lf.add(b2); for (let i = 0; i < 8; i++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.04), iron); bar.position.set(-0.65 + i * 0.185, 0.7, 0); lf.add(bar) } piv.add(lf); L.add(piv); return piv }
+    const leaf = (hx, dir) => { const piv = new THREE.Group(); piv.position.set(hx, 0, 6.5); const lf = new THREE.Group(); lf.position.x = dir * 0.8; lf.add(new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.05), iron)); lf.children[0].position.y = 1.15; const b2 = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 0.05), iron); b2.position.y = 0.25; lf.add(b2); for (let i = 0; i < 8; i++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.0, 0.04), iron); bar.position.set(-0.65 + i * 0.185, 0.7, 0); lf.add(bar) } piv.add(lf); L.add(piv); return piv }
     const a = leaf(-0.2, 1), b = leaf(2.6, -1)
-    const gb = L.walk.box(-0.4, 11.45, 2.8, 11.75); let open = 0
-    L.refs.gatePos = new THREE.Vector3(1.2, 1, 11.6)
+    const gb = L.walk.box(-0.4, 6.35, 2.8, 6.65); let open = 0
+    L.refs.gatePos = new THREE.Vector3(1.2, 1, 6.5)
     L.updaters.push((dt) => {
-      const sc = G.scooter, pl = G.player, near = (x, z) => Math.hypot(x - 1.2, z - 11.6) < 5.2
+      const sc = G.scooter, pl = G.player, near = (x, z) => Math.hypot(x - 1.2, z - 6.5) < 5.2
       const want = near(pl.pos.x, pl.pos.z) || (sc && near(sc.chassis.position.x, sc.chassis.position.z)) ? 1 : 0
       const was = open; open += (want - open) * Math.min(1, dt * 2.6)
       a.rotation.y = -1.5 * open; b.rotation.y = 1.5 * open
@@ -103,16 +184,16 @@ export function populateHome(G, L, night, o = {}) {
       if (was >= 0.5 && open < 0.5) { if (!L.walk.boxes.includes(gb)) L.walk.boxes.push(gb); if (G.audio.ctx) G.audio.door(L.refs.gatePos, false) }
     }) }
   // a covered veranda in front of the door: the scooter is parked here
-  { const rf = bx(L.group, 7.2, 0.14, 3.0, wall, 0, 2.7, 4.8); for (const [x, z] of [[-3.4, 6.1], [3.4, 6.1]]) cyl(L.group, 0.1, 0.1, 2.7, wall, x, 0, z, 8); L.walk.circle(-3.4, 6.1, 0.15); L.walk.circle(3.4, 6.1, 0.15) }
+  { const rf = bx(L.group, 9.6, 0.14, 3.2, wall, 0, 2.7, -1.4); for (const [x, z] of [[-4.6, 0], [4.6, 0]]) cyl(L.group, 0.1, 0.1, 2.7, wall, x, 0, z, 8); L.walk.circle(-4.6, 0, 0.15); L.walk.circle(4.6, 0, 0.15) }
   // neighbours across the street
   buildHouse(L, { x: -14, z: 25, w: 8, d: 6, h: 3.4, rot: Math.PI, col: '#b8d0c2', roof: 'flat', interior: false, windows: [{ side: 's', x: -2, y: 1.3, w: 1, h: 1, lit: true }, { side: 's', x: 2, y: 1.3, w: 1, h: 1 }] })
   buildHouse(L, { x: 5, z: 26, w: 9, d: 6, h: 3.4, rot: Math.PI, col: '#d8b8a0', roof: 'tile', interior: false, windows: [{ side: 's', x: -2.5, y: 1.3, w: 1, h: 1 }] })
   buildHouse(L, { x: 24, z: 25, w: 7, d: 6, h: 3.2, rot: Math.PI, col: '#c8c0e0', roof: 'flat', interior: false, windows: [{ side: 's', x: 0, y: 1.3, w: 1.2, h: 1 }] })
   buildHouse(L, { x: -24, z: -4, w: 8, d: 7, h: 3.2, rot: 0, col: '#e8d0a0', roof: 'tile', interior: false })
   buildHouse(L, { x: 17, z: -2, w: 8, d: 7, h: 3.2, rot: 0, col: '#cfd8c0', roof: 'flat', interior: false })
-  for (let x = -20; x <= 80; x += 22) { pole(L, x, 11.2, 8); }
-  for (let x = -20; x < 80; x += 22) wires(L, { x, y: 7.6, z: 11.2 }, { x: x + 22, y: 7.6, z: 11.2 }, 0.8)
-  streetLight(L, 12, 11.6, false)
+  for (let x = -20; x <= 80; x += 22) { pole(L, x, 8.2, 8); }
+  for (let x = -20; x < 80; x += 22) wires(L, { x, y: 7.6, z: 8.2 }, { x: x + 22, y: 7.6, z: 8.2 }, 0.8)
+  streetLight(L, 12, 6.5, false)
   const auto = autoRickshaw(); auto.position.set(-12, 0, 16); auto.rotation.y = Math.PI / 2; L.add(auto); L.walk.circle(-12, 16, 1.1); L.walk.circle(-12.7, 16, 1)
   const cw = cow(); cw.position.set(18, 0, 16.4); cw.rotation.y = 1.4; L.add(cw); L.walk.circle(18, 16.4, 0.9)
   const dg = dogModel(); dg.position.set(2, 0, 17.3); dg.rotation.y = 2; L.add(dg)
@@ -124,7 +205,7 @@ export function populateHome(G, L, night, o = {}) {
     // chacha on the veranda, working on his bike
     const bk = motorbike('#a31d1d'); bk.position.set(2.6, 0, 6.4); bk.rotation.y = Math.PI / 2; L.add(bk); L.walk.circle(2.0, 6.4, 0.55); L.walk.circle(3.2, 6.4, 0.55)
     const ch = G.addActor('chacha'); ch.place(2.6, 7.6, Math.PI); ch.sfx = false; ch.P.setPose('rub'); ch.P.crouch = 0.55; L.walk.circle(2.6, 7.6, 0.45); L.refs.chacha = ch; L.refs.chachaPos = new THREE.Vector3(2.6, 1.1, 7.4)
-    if (!o.inRoad) makeTraffic(L, G, [{ x: -30, z: 15 }, { x: 150, z: 15 }], { count: 6, lane: 2.1 })
+    if (!o.inRoad) makeTraffic(L, G, [{ x: -30, z: 15 }, { x: 150, z: 15 }], { count: 6, lane: 3.5 })
   }
   // ---- the neighbourhood is open to roam: you can walk or ride off the road, anywhere that is not a wall ----
   if (!o.inRoad) { L.walk.free = true; L.core = [[{ x: -30, z: 15 }, { x: 150, z: 15 }]]; L.roam = { stray: 600, pits: 0, seed: 3 } }
@@ -153,9 +234,16 @@ export function populateHome(G, L, night, o = {}) {
     for (const x of [-32, 22, 66, 96, 126]) tr(x + 4, R.range(-12, -6), 1.1), tr(x, R.range(24, 34), 1.2)
   }
   // scooter parked on the street, facing +x (east: the way out of town)
-  L.spawn = night ? { x: 2, z: 5, yaw: Math.PI } : { x: -2.35, z: -1.9, yaw: Math.PI / 2 } // wake up beside the bed
+  L.spawn = night ? { x: 2, z: 5, yaw: Math.PI } : { x: -3.2, z: -14.5, yaw: Math.PI / 2 } // wake up beside the bed
   if (!night) {
-    G.addScooter(L, -1.6, 5.0, 0)   // parked on the veranda, facing the gate
+    // A proper bike shed in the yard — never inside the house.
+    {
+      const sm = withPBR(new THREE.MeshStandardMaterial({ map: tex.tin(), side: THREE.DoubleSide, roughness: 0.8, metalness: 0.3 }))
+      const roof = bx(L.group, 4.8, 0.1, 3.4, sm, 6, 2.4, 3.5); roof.rotation.x = 0.08
+      for (const [x, z] of [[3.8, 4.8], [8.2, 4.8], [3.8, 2.2], [8.2, 2.2]]) cyl(L.group, 0.08, 0.08, 2.4, wall, x, 0, z, 6)
+      bx(L.group, 4.8, 0.12, 0.12, wall, 6, 0.2, 4.9)
+    }
+    G.addScooter(L, 6, 3.4, 0)   // parked under the shed, facing the gate
   }
   return house
 }
@@ -166,10 +254,13 @@ export function build(G, opts = {}) {
   G.env.set(night ? 'night' : 'homeDay', true)
   L.ground(300, 300, 'grass', 8, 0, 0, night ? 0xb0b8c0 : 0xffffff)
   // road along x at z=14
-  const road = L.ground(260, 8, 'road', 6, 20, 15); road.position.y = 0.012
-  const verge = L.ground(260, 1.4, 'mud', 3, 20, 10.3); verge.position.y = 0.008
-  const verge2 = L.ground(260, 1.4, 'mud', 3, 20, 19.7); verge2.position.y = 0.008
-  L.walk.corridor([[-30, 15], [90, 15]], 4.2, 'road')
+  const road = L.ground(260, 12, 'road', 6, 20, 15); road.position.y = 0.012
+  // footpaths on both sides, then a muddy verge
+  const fp1 = L.ground(260, 1.6, 'cement', 2, 20, 8.2); fp1.position.y = 0.016
+  const fp2 = L.ground(260, 1.6, 'cement', 2, 20, 21.8); fp2.position.y = 0.016
+  const verge = L.ground(260, 1.4, 'mud', 3, 20, 7.0); verge.position.y = 0.008
+  const verge2 = L.ground(260, 1.4, 'mud', 3, 20, 23.0); verge2.position.y = 0.008
+  L.walk.corridor([[-30, 15], [90, 15]], 6, 'road')
   L.walk.bound = { x0: -70, z0: -40, x1: 150, z1: 60 }
   const house = populateHome(G, L, night)
   // ambience

@@ -23,6 +23,23 @@ import { mouseCtl } from './core/mouse.js'
 const $ = (id) => document.getElementById(id)
 const SKEY = 'tlwo_settings_v1'
 const defaults = { master: 0.8, voice: 1, amb: 0.8, sfx: 1, sens: 1, mouselook: 'auto', subs: 'both', caps: true, gfx: 'med', shake: false, flash: false, vlang: 'hi', nav: 'full', fov: 70, subsz: 1, playerChar: 'Nishan', keyaid: 'off' }
+const GFX_KEYS = ['low', 'med', 'high', 'ultra']
+const GFX_LABEL = ['Low', 'Medium', 'High', 'Ultra']
+// Read the real renderer name so the settings screen can recommend a preset.
+function detectGfx() {
+  let gpu = ''
+  try {
+    const gl = G.renderer && G.renderer.getContext()
+    const ext = gl && gl.getExtension('WEBGL_debug_renderer_info')
+    if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ''
+  } catch (e) {}
+  const threads = navigator.hardwareConcurrency || 4
+  const mem = navigator.deviceMemory || 4
+  if (/swiftshader|llvmpipe|softpipe|software/i.test(gpu)) return { key: 'low', label: 'Software renderer', note: 'No real GPU detected — Low is safest.' }
+  if (/HD Graphics|UHD Graphics|Iris|Radeon Graphics|Vega i?GPU|Apple M/i.test(gpu) || threads <= 4 || mem <= 4)
+    return { key: 'med', label: gpu || 'integrated GPU', note: 'Integrated graphics detected — Medium keeps it smooth.' }
+  return { key: 'ultra', label: gpu || 'dedicated GPU', note: 'Dedicated GPU detected — Ultra should be fine.' }
+}
 let S = { ...defaults, ...(() => { try { return JSON.parse(localStorage.getItem(SKEY) || '{}') } catch (e) { return {} } })() }
 // One-time migration: old saves had 'context' as the default, which kept the
 // bottom key hints on screen. Players can still re-enable them in Settings.
@@ -53,14 +70,23 @@ function applySettings() {
   nav.setMode(S.nav); G.cfg.fov = +S.fov; G.cfg.keyaid = S.keyaid; document.documentElement.style.setProperty('--subsz', S.subsz);
   G.cfg.reduceShake = !!S.shake; G.cfg.reduceFlash = !!S.flash; ui.reduceFlash = !!S.flash
   if (G.renderer) G.setGfx(S.gfx); else G.cfg.gfx = S.gfx
+  const gi = Math.max(0, GFX_KEYS.indexOf(S.gfx))
+  const gf = $('s-gfx'); if (gf) gf.value = String(gi)
+  const glab = $('s-gfx-label'); if (glab) glab.textContent = GFX_LABEL[gi]
   localStorage.setItem(SKEY, JSON.stringify(S))
 }
 function bindSettings() {
-  const map = { 's-master': 'master', 's-voice': 'voice', 's-amb': 'amb', 's-sfx': 'sfx', 's-sens': 'sens', 's-mouselook': 'mouselook', 's-subs': 'subs', 's-caps': 'caps', 's-gfx': 'gfx', 's-shake': 'shake', 's-flash': 'flash', 's-vlang': 'vlang', 's-nav': 'nav', 's-fov': 'fov', 's-subsz': 'subsz', 's-keyaid': 'keyaid' }
+  const map = { 's-master': 'master', 's-voice': 'voice', 's-amb': 'amb', 's-sfx': 'sfx', 's-sens': 'sens', 's-mouselook': 'mouselook', 's-subs': 'subs', 's-caps': 'caps', 's-shake': 'shake', 's-flash': 'flash', 's-vlang': 'vlang', 's-nav': 'nav', 's-fov': 'fov', 's-subsz': 'subsz', 's-keyaid': 'keyaid' }
   for (const [id, k] of Object.entries(map)) {
     const el = $(id); if (el.type === 'checkbox') el.checked = !!S[k]; else el.value = S[k]
     el.addEventListener('input', () => { S[k] = el.type === 'checkbox' ? el.checked : (el.tagName === 'SELECT' ? el.value : +el.value); applySettings() })
   }
+  const gf = $('s-gfx')
+  if (gf) gf.addEventListener('input', () => { S.gfx = GFX_KEYS[+gf.value] || 'med'; applySettings() })
+  const reco = detectGfx()
+  const hint = $('gfx-hint'); if (hint) hint.textContent = reco.note
+  if ($('gfx-reco')) $('gfx-reco').onclick = () => { S.gfx = reco.key; applySettings(); ui.toast('Recommended graphics applied', 2) }
+  addEventListener('tlwo-auto-gfx', (e) => { if (e.detail && e.detail.gfx) { S.gfx = e.detail.gfx; applySettings() } })
 }
 
 // ---------- reality report ----------

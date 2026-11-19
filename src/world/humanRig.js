@@ -8,6 +8,7 @@
 //   0 FAR   — a 3-mesh silhouette proxy, no skeletal animation at all
 // The world LOD manager switches tiers by distance; only near rigs cost draw calls.
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { tex, withPBR, fabricNormal } from './textures.js'
 import { OUTFITS } from './people.js'
 
@@ -84,6 +85,61 @@ const mesh = (parent, geo, mat, x = 0, y = 0, z = 0) => {
 const joint = (parent, x = 0, y = 0, z = 0) => {
   const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g
 }
+
+// A rig is built from ~70 tiny meshes. Most of them are sibling detail on the
+// same joint sharing one material (fingers, buttons, pockets, braids, ...).
+// Collapse each such group into a single geometry: joints still animate
+// independently, materials stay identical, and one draw call replaces many.
+// LOD tiers are preserved — a group becomes CORE if any member was CORE, so
+// sub-pixel detail simply becomes visible a little earlier instead of costing
+// an extra tier. `keep` holds meshes that must stay separate (the animated
+// mouth), which stay in their original tier.
+function collapseJointDetail(core, hi, keep) {
+  const tier = new Map()
+  core.forEach(m => tier.set(m, 'core'))
+  hi.forEach(m => tier.set(m, 'hi'))
+  const parents = new Set()
+  for (const m of core) parents.add(m.parent)
+  for (const m of hi) parents.add(m.parent)
+  const mergedCore = [], mergedHi = []
+  for (const parent of parents) {
+    const groups = new Map()
+    for (const m of parent.children) {
+      if (!m.isMesh || keep.has(m) || !tier.has(m)) continue
+      let list = groups.get(m.material)
+      if (!list) groups.set(m.material, list = [])
+      list.push(m)
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2) continue
+      const parts = []
+      for (const m of list) {
+        m.updateMatrix()
+        const g = m.geometry.clone(); g.applyMatrix4(m.matrix); parts.push(g)
+      }
+      const geo = mergeGeometries(parts, false)
+      parts.forEach(g => g.dispose())
+      if (!geo) continue
+      const mesh = new THREE.Mesh(geo, list[0].material)
+      mesh.castShadow = list.some(m => m.castShadow)
+      mesh.receiveShadow = list.some(m => m.receiveShadow)
+      mesh.renderOrder = Math.max(...list.map(m => m.renderOrder))
+      parent.add(mesh)
+      for (const m of list) {
+        parent.remove(m)
+        const bucket = tier.get(m) === 'core' ? core : hi
+        bucket.splice(bucket.indexOf(m), 1)
+      }
+      ;(list.some(m => tier.get(m) === 'core') ? mergedCore : mergedHi).push(mesh)
+    }
+  }
+  const restCore = core.slice(), restHi = hi.slice()
+  core.length = 0; hi.length = 0
+  restCore.forEach(m => core.push(m))
+  restHi.forEach(m => hi.push(m))
+  mergedCore.forEach(m => core.push(m))
+  mergedHi.forEach(m => hi.push(m))
+}
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
 const damp = (a, b, l, dt) => a + (b - a) * Math.min(1, l * dt)
 const pick = (a) => a[Math.floor(Math.random() * a.length)]
@@ -107,6 +163,7 @@ export function buildHuman(o = {}) {
   let hairColor = o.hair || (age === 'elder' ? '#c9c4b8' : pick(['#14100d', '#1d1712', '#3a2418', '#6b4a2a']))
   const style = o.hairStyle || (female ? 'bun' : age === 'elder' ? 'thin' : 'short')
   const simple = !!o.simple // permanently-lite crowd (used only when explicitly asked)
+  let hairCap = null
 
   if (o.flat) { skin = '#050505'; bottom = '#050505'; hairColor = '#000000'; top = ['#050505', '#050505', 'plain'] }
   const fn = o.flat ? null : fabricNormal(5, 4)
@@ -160,7 +217,7 @@ export function buildHuman(o = {}) {
       add(head, partialSphereGeo(headR * 1.18, 0.62), material(o.turban || '#c4572a'), 0, headR * 1.12, -headR * 0.06).scale.set(0.99, 1.05, 1.08)
     } else {
       const cap = add(head, partialSphereGeo(headR * (style === 'thin' ? 1.02 : 1.07), style === 'thin' ? 0.42 : 0.52), hairM, 0, headR * 1.12, -headR * 0.1)
-      cap.scale.set(0.99, 1.12, 1.08)
+      cap.scale.set(0.99, 1.12, 1.08); hairCap = cap; cap.userData.sway = 1
       if (style === 'bun') add(head, sphereGeo(headR * 0.5), hairM, 0, headR * 1.2, -headR * 1.0, 'hi')
       if (style === 'braids') for (const side of [-1, 1]) for (let i = 0; i < 5; i++) add(head, sphereGeo(0.03 * s), hairM, side * 0.07 * s, headR * 0.7 - i * 0.07 * s, -headR * 0.9 - i * 0.012, 'hi')
       if (style === 'short') add(head, new THREE.BoxGeometry(headR * 0.7, headR * 0.16, headR * 0.12), hairM, 0, headR * 1.55, headR * 0.82, 'hi').rotation.x = -0.25 // fringe
@@ -242,6 +299,8 @@ export function buildHuman(o = {}) {
   const proxyMeshes = [pLegs, pBody, pHead]
   proxyMeshes.forEach(m => { m.visible = false; m.castShadow = false })
 
+  collapseJointDetail(coreMeshes, hiMeshes, new Set([mouthMesh]))
+
   const rig = {
     root, body, hips, spine, chest, neck, head, arms, legs, o, h, fat, legL,
     mouthM: mouthMesh, mouth: 0, lookX: 0, lookY: 0, crouch: 0, tremble: 0, held: null,
@@ -277,11 +336,20 @@ export function buildHuman(o = {}) {
       const w = clamp(Math.abs(this.speed) / 1.5, 0, 1.3)
       const ph = this.phase += dt * (2 + this.speed * 2.2)
       const pose = this.pose
+      // Snapshot the previous frame so every pose change is eased instead of
+      // snapping — one extra math pass, no new meshes or draw calls.
+      const old = {
+        bodyY: body.position.y,
+        thigh: legs.map(l => l.thigh.rotation.x), knee: legs.map(l => l.knee.rotation.x), ankle: legs.map(l => l.ankle.rotation.x),
+        shX: arms.map(a => a.shoulder.rotation.x), shZ: arms.map(a => a.shoulder.rotation.z), elX: arms.map(a => a.elbow.rotation.x),
+        chX: chest.rotation.x, chY: chest.rotation.y, hipY: hips.rotation.y, hdZ: head.rotation.z, hdY: head.position.y
+      }
       const sit = pose === 'sit' || pose === 'pillion' || pose === 'sit_drink' || pose === 'sit_eat'
       const breath = Math.sin(this.t * 1.9) * 0.014
       chest.scale.set(1 + breath, 1 + breath * 0.5, 1 + breath)
-      head.rotation.z = Math.sin(this.t * 0.8) * 0.015
+      head.rotation.z = Math.sin(this.t * 0.8) * 0.015 - chest.rotation.y * 0.25
       head.position.y = neckLen + Math.sin(this.t * 1.9 + 0.4) * 0.005
+      if (hairCap) hairCap.rotation.z = Math.sin(this.t * 2.3) * (0.008 + w * 0.02) - head.rotation.z * 0.3
 
       if (sit) {
         body.position.y = -0.3 * s
@@ -295,6 +363,7 @@ export function buildHuman(o = {}) {
           l.thigh.rotation.x = Math.sin(k) * 0.62 * w
           l.knee.rotation.x = Math.max(0, -Math.cos(k)) * 0.8 * w
           l.ankle.rotation.x = -Math.sin(k) * 0.22 * w
+          l.foot.rotation.x = Math.sin(k - 0.5) * 0.16 * w // heel-toe roll
         })
         arms.forEach((a, i) => {
           const k = ph + (i ? 0 : Math.PI)
@@ -354,6 +423,22 @@ export function buildHuman(o = {}) {
       } else chest.rotation.z = damp(chest.rotation.z, 0, 8, dt)
       head.rotation.y = damp(head.rotation.y, clamp(this.lookY || this.look, -1.1, 1.1), 7, dt)
       head.rotation.x = damp(head.rotation.x, clamp(this.lookX, -0.6, 0.6), 7, dt)
+      const kb = 1 - Math.exp(-dt * (w > 0.25 ? 16 : 10))
+      const bl = (a, b) => a + (b - a) * kb
+      body.position.y = bl(old.bodyY, body.position.y)
+      legs.forEach((l, i) => {
+        l.thigh.rotation.x = bl(old.thigh[i], l.thigh.rotation.x)
+        l.knee.rotation.x = bl(old.knee[i], l.knee.rotation.x)
+        l.ankle.rotation.x = bl(old.ankle[i], l.ankle.rotation.x)
+      })
+      arms.forEach((a, i) => {
+        a.shoulder.rotation.x = bl(old.shX[i], a.shoulder.rotation.x)
+        a.shoulder.rotation.z = bl(old.shZ[i], a.shoulder.rotation.z)
+        a.elbow.rotation.x = bl(old.elX[i], a.elbow.rotation.x)
+      })
+      chest.rotation.x = bl(old.chX, chest.rotation.x); chest.rotation.y = bl(old.chY, chest.rotation.y)
+      hips.rotation.y = bl(old.hipY, hips.rotation.y)
+      head.rotation.z = bl(old.hdZ, head.rotation.z); head.position.y = bl(old.hdY, head.position.y)
     }
   }
   return rig

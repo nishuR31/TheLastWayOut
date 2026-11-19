@@ -15,6 +15,7 @@ html,body{margin:0;height:100%;background:#000;color:var(--fg);font-family:'Inte
 body.right-look #c{cursor:crosshair}
 .hidden{display:none!important}
 .layer{position:fixed;inset:0;pointer-events:none}
+#wakeblink{background:#000;opacity:0;z-index:8;pointer-events:none}
 #vignette{background:radial-gradient(ellipse at center,transparent 42%,rgba(0,0,0,.72) 100%);z-index:2}
 #fear{background:radial-gradient(ellipse at center,transparent 38%,rgba(110,0,0,.55) 100%);opacity:0;transition:opacity .5s;z-index:2}
 /* Horror director: cold tunnel-vision vignette + jump-scare flash */
@@ -23,12 +24,13 @@ body.right-look #c{cursor:crosshair}
 #helmetvision{background:radial-gradient(ellipse at center,transparent 36%,rgba(3,5,8,.86) 100%);opacity:0;transition:opacity .45s;z-index:3;pointer-events:none}
 #visor{position:fixed;inset:0;z-index:4;pointer-events:none;transform:translateY(-103%);transition:transform .55s cubic-bezier(.2,.8,.2,1)}
 #visor.down{transform:translateY(0)}
-#visor::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(18,28,40,.58) 0%,rgba(20,30,42,.4) 44%,rgba(22,32,44,.12) 70%,transparent 84%)}
-#visor::after{content:'';position:absolute;left:9%;right:9%;bottom:22%;height:10px;border-radius:50%;background:linear-gradient(90deg,transparent,rgba(150,170,190,.5),transparent)}
+/* a lowered full-face shield leaves a central sight strip, darker at the rim */
+#visor::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(6,10,16,.88) 0%,rgba(8,12,18,.58) 16%,rgba(10,14,20,.12) 38%,rgba(10,14,20,.12) 62%,rgba(8,12,18,.5) 84%,rgba(6,10,16,.82) 100%)}
+#visor::after{content:'';position:absolute;left:7%;right:7%;bottom:18%;height:12px;border-radius:50%;background:linear-gradient(90deg,transparent,rgba(150,170,190,.55),transparent);box-shadow:0 -2px 14px rgba(8,12,18,.6)}
 /* Sense of speed: peripheral streaks that build with velocity. The visor
    (V) cuts most of the wind rush, so JS scales this down when it is down. */
 /* A subtle brow line so first-person view reflects the helmet being worn. */
-#helmetbrow{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(ellipse 70% 26% at 50% -4%,rgba(12,17,24,.72) 0%,rgba(12,17,24,.28) 55%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,transparent 100%);-webkit-mask-image:linear-gradient(180deg,#000 0%,transparent 100%)}
+#helmetbrow{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .3s;background:radial-gradient(ellipse 74% 30% at 50% -6%,rgba(10,14,20,.82) 0%,rgba(10,14,20,.34) 55%,transparent 100%),radial-gradient(ellipse 74% 22% at 50% 106%,rgba(10,14,20,.62) 0%,transparent 100%)}
 #speedfx{position:fixed;inset:0;z-index:3;pointer-events:none;opacity:0;transition:opacity .16s linear;mix-blend-mode:screen;
   background:repeating-conic-gradient(from 0deg at 50% 50%,transparent 0deg 2.4deg,rgba(212,228,246,.15) 2.5deg 3deg,transparent 3.1deg 7deg),radial-gradient(ellipse at center,transparent 40%,rgba(150,190,235,.2) 100%);
   -webkit-mask-image:radial-gradient(ellipse at center,transparent 38%,#000 80%);mask-image:radial-gradient(ellipse at center,transparent 38%,#000 80%)}
@@ -449,3 +451,12 @@ body.show-actionbar #actionbar{display:flex}
 .kc-row kbd{min-width:74px;flex:none;margin:0;text-align:center;border-color:#8a7a4a;background:#1b1a14;color:#e9c46a;font-size:11px}
 @media (max-width:560px){#keycard{grid-template-columns:1fr;gap:8px}#keyaid{bottom:40px}}
 @media (prefers-reduced-motion:reduce){#keycard.show{animation:none}}
+/* graphics slider: four named stops with a hardware recommendation */
+.gfx-block{margin:14px 0 6px;padding:12px 14px;border:1px solid var(--border,#4a4132);border-radius:4px;background:rgba(20,22,19,.55)}
+.gfx-head{display:flex!important;justify-content:space-between;align-items:baseline;margin:0 0 8px!important;font-size:14px;letter-spacing:.06em}
+.gfx-val{color:var(--accent);font-weight:700;font-size:15px}
+.gfx-block input[type=range]{width:100%!important;height:20px;margin:0}
+.gfx-scale{display:flex;justify-content:space-between;margin-top:2px;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9d9686}
+.gfx-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.gfx-hint{font-size:11px;line-height:1.4;color:#a8a291;flex:1}
+.gfx-reco{margin:0!important;min-width:0!important;width:auto!important;padding:5px 10px!important;font-size:11px!important;letter-spacing:.04em!important;border-color:#8a7a4a!important;color:#e9c46a!important}

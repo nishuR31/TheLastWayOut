@@ -23,8 +23,11 @@ export const P = () => G.player
 
 export async function load(name, opts = {}, comp = { x: 0, z: 0, outfit: 'nishant' }) {
   ui.show('hud', true)
-  const L = await G.loadLevel(name, opts)
-  if (comp !== false) {
+  const stream = G._streamArmed === name
+  if (stream && G.level && G.level.name === name) { G._streamArmed = null; G._streamed = true; return G.level }
+  const L = await G.loadLevel(name, stream ? { ...opts, stream: true } : opts)
+  G._streamArmed = null
+  if (!stream && comp !== false) {
     const sp = L.spawn, f = { x: Math.sin(sp.yaw), z: Math.cos(sp.yaw) }
     G.spawnCompanion(sp.x - f.z * -1.1 + (comp.dx || 0), sp.z - f.x * 1.1 + (comp.dz || 0), sp.yaw, comp.outfit || 'nishant')
   }
@@ -38,8 +41,12 @@ export async function load(name, opts = {}, comp = { x: 0, z: 0, outfit: 'nishan
   }
   return L
 }
-export async function startScene(fadeSec = 1.6) { G.input.enabled = true; G.input.lock(); G.cineSet(0); await ui.fade(0, fadeSec) }
-export async function endScene(fadeSec = 1.4) { await ui.fade(1, fadeSec) }
+export async function startScene(fadeSec = 1.6) {
+  G.input.enabled = true; G.input.lock()
+  if (G._walkthroughT > 0) return // a streamed chapter begins mid-walk: no fade, no crane reset
+  G.cineSet(0); await ui.fade(0, fadeSec)
+}
+export async function endScene(fadeSec = 1.4) { if (G._walkthroughT > 0) return; await ui.fade(1, fadeSec) }
 
 // wait for the player to press E on something at pos
 export function useAt(pos, label, o) { return G.interact(pos, label, o) }

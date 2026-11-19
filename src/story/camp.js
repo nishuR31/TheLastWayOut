@@ -16,18 +16,34 @@ export async function ch2(s) {
   const L = await load('camp', { env: 'day' }, { dx: 1.2 })
   const c = G.comp, p = P()
   G.hasSignal = true; G.photos = 0; G.matches = 0; G.clockRate = 30
-  p.pos.set(0, 0, -22); p.yaw = 0
+  if (!G._streamed) { p.pos.set(0, 0, -22); p.yaw = 0 }
   const FP = L.refs.firePit, bike = L.refs.bikePos, sc = G.scooter
   // the crew
   const arunab = spawn('arunab', -2.6, 58.4, 1.4), karan = spawn('karan', 2.8, 64.4, 3.6), aman = spawn('aman', 5.2, 62.0, 4.4), rohan = spawn('rohan', -1.2, 65.6, 0.3)
   arunab.pose('sit'); karan.pose('sit'); rohan.pose('sit')
+  // two visitors wait by their bikes on the approach — the camp is already
+  // occupied before the player takes the last few steps into the clearing
+  const biker1 = spawn('farmer', -7.6, 46, 1.1), biker2 = spawn('chaiwala', 7.2, 50, -0.7)
+  biker1.pose('stand'); biker2.pose('sit')
+  G.addInteract({ pos: biker1.pos, label: 'Bike wale se baat karo · Talk to the biker', r: 2.8, cone: -1, once: false,
+    onUse: () => ui.say('Biker', 'Camp thoda aage hai. Shaam se pehle wapas aa jaana.', 'The camp is just ahead. Get back before evening.', { pos: biker1.pos }) })
   compHold(-3, 8); c.mode = 'follow'
   await startScene(1.2)
   ui.titleCard('CHAPTER 3', 'Campsite', '2:45 PM', 3.2)
   await wait(0.6)
-  await T('Ye lo. Ho gaya. Bike yahin lagate hain, sabke saath.', 'Here we are. Let\'s park the bike with the others.', { dur: 3.2 })
-  await N('Haan. Safe lagta hai.', 'Yes. Feels safe.', { dur: 2 })
-  // the bike goes under the sal tree and stays in plain sight
+  // The reserve board is the threshold. Three short stages carry the player
+  // through the trees to the clearing instead of one long, empty walk.
+  caption('[The mossy reserve board is behind you. The trees fold over a narrow earth path; the road noise drops away.]', 5.5)
+  await T('Yahi rasta hai. Chalo, andar.', 'This is the path. Come on, in we go.', { dur: 2.8 })
+  await N('Bike sal ke neeche lag gayi. Safe hai.', 'The bike is under the sal tree. It is safe.', { dur: 2.8 })
+  ui.objective('Jungle ke andar · Walk into the forest')
+  await gate(() => G.distToPlayer(2, -2) < 5, () => snapTo(2, -2), 0, [2, -2, 'Jungle ke andar · Enter the forest'])
+  caption('[The trail bends between the trunks. A motorbike hums somewhere ahead, then voices.]', 5)
+  await N('Sun raha hai? Koi hai.', 'Can you hear that? Someone is here.', { dur: 2.6 })
+  ui.objective('Andar tak · Follow the forest trail')
+  await gate(() => G.distToPlayer(4, 18) < 6, () => snapTo(4, 18), 0, [4, 18, 'Andar tak · Follow the trail'])
+  caption('[An arrow on a wooden plank: CAMP SITE →. Two parked bikes by the path, their owners resting in the shade.]', 5.5)
+  await T('Wahi camp hai. Log bhi hain, bikes bhi.', 'That is the camp. People and bikes, both.', { dur: 3.2 })
   ui.objective('Camp tak chalo · Walk up to the campsite')
   ui.toast('Scooter sal ke ped ke neeche lag gayi. Camp tak chalo', 4)
   await gate(() => G.distToPlayer(0, 50) < 12, () => snapTo(0, 46), 0, [0, 50, 'Camp ki taraf · To the campsite'])
@@ -72,7 +88,14 @@ export async function ch2(s) {
   act('aman', aman.pos, 'Aman ka drone: group photo', async () => {
     await M('Ek group photo kheenchte hain, sab line mein! Dekho, upar se kaisa lag raha hai!', 'Group photo, everyone in line! Look how it looks from above!', { dur: 4 })
     caption('[the drone screen: a green canopy, the stream like a thread of silver glass]', 4.4)
-    await wait(2); audio.click(); G.photos++; ui.toast('Group photo li gayi [ic:camera] · Group photo taken', 3)
+    // Only an in-world cinematic: everyone turns to the buzz and poses, then
+    // one shutter click. Nothing is captured from the real device.
+    const crowd = [arunab, karan, aman, rohan, c].filter(Boolean)
+    for (const a of crowd) { a.look({ x: aman.pos.x, y: 7, z: aman.pos.z }); a.face(aman.pos); a.pose('photo') }
+    await wait(1.4)
+    audio.click(); G.photos++; ui.toast('Group photo li gayi [ic:camera] · Group photo taken', 3)
+    await wait(1.2)
+    for (const a of crowd) a.pose('stand')
   })
   act('rohan', rohan.pos, 'Rohan se baat karo', async () => {
     await wait(0.4)
@@ -111,7 +134,7 @@ export async function ch2(s) {
   })
   G.addInteract({ pos: L.refs.bench, label: 'Bench par aaram karo (waqt guzarta hai)', r: 2.4, cone: -1, key: 'E', once: false, enabled: () => !busy && G.time < 17, onUse: () => {
     busy = true; p.canMove = false
-    ;(async () => { try { caption('[you sit a while. Birds. The creak of the bench. Time slides past...]', 4); await wait(3); setTime(Math.min(17, G.time + 0.55), 0, false, true); G.clockRate = 30 } finally { busy = false; p.canMove = true } })().catch(() => {})
+    ;(async () => { try { G.sit(true); caption('[you sit a while. Birds. The creak of the bench. Time slides past...]', 4); await wait(3); setTime(Math.min(17, G.time + 0.55), 0, false, true); G.clockRate = 30 } finally { G.sit(false); busy = false; p.canMove = true } })().catch(() => {})
   } })
   await gate(() => G.time >= 17, () => setTime(17, 0, false, true), 0)
   ui.objective(null); G.interacts = []; while (busy) await wait(0.3)
@@ -129,6 +152,8 @@ export async function ch2(s) {
   for (const [x, z] of [[-2.4, 59.1], [2.5, 63.2], [-0.5, 63.3], [3.4, 60.9]]) {
     const cup = makeChai(); cup.position.set(x, 0.44, z); L.group.add(cup)
   }
+  G.addInteract({ pos: V3(2.5, 0.5, 63.2), label: 'Chai piyo · Drink a cup of tea', r: 2.3, cone: -1, key: 'E', once: false,
+    onUse: () => { if (audio.gulp) audio.gulp(2); caption('[the tea is too hot, but the warmth is worth it]', 3) } })
   await K('(guitar bajata hai) Sab saath mein! Wahi purana gaana!', '(plays) Everyone together! The old song!', { dur: 3 })
   caption('[six people singing in six different keys. Nishant is the loudest]', 4.6)
   await wait(4)
@@ -183,13 +208,36 @@ async function loopScene(L, c, p, s) {
   caption('[the sky rolls over like spilled ink. The birds stop mid-call. Their breath shows. Thunder, far off]', 5)
   await T('Ye achanak kya hua? Baadal kahan se aa gaye?', 'What was that? Where did these clouds come from?', { dur: 3.2 })
   await N('Jaldi chal. Bike tak.', 'Quick. To the bike.', { dur: 1.8 })
+  // No blink, no cut: they actually walk the same ground back to the fire.
+  // Each pass the place has shifted a little, which is the point of the loop.
   const back = async () => {
-    p.canMove = false
-    await G.blink(1.0)
-    p.pos.set(FP.x + 1.6, 0, FP.z - 2.2); p.yaw = toBike; p.pitch = 0
-    c.place(FP.x - 1.2, FP.z - 2.8, toBike)
-    await G.unblink(0.9); p.canMove = true
+    const home = new THREE.Vector3(FP.x + 1.6, 0, FP.z - 2.2)
+    baseGoalTo(home, 'Wapas campfire tak · Walk back to the fire')
+    ui.toast('Wapas chalke jao — raasta wahi hai', 3)
+    await G.until(() => G.auto || G.distToPlayer(home.x, home.z) < 4)
+    c.mode = 'follow'; c.path = []
   }
+  // The only reliable way out of a loop is to leave yourself a trail.
+  const addMark = (x, z, label, fn) => G.addInteract({
+    pos: new THREE.Vector3(x, 1, z), label, r: 2.7, cone: -1, once: true,
+    onUse: () => { fn(); audio.click(); ui.toast(label.split('·')[0].trim(), 2.6) }
+  })
+  const tree = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 2.4, 7), new THREE.MeshStandardMaterial({ color: '#6a4a2e' }))
+  tree.position.set(FP.x - 6, 1.2, FP.z + 5); L.add(tree)
+  const scar = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.42), new THREE.MeshBasicMaterial({ color: '#d8c39a', side: THREE.DoubleSide }))
+  scar.position.set(FP.x - 5.76, 1.3, FP.z + 5); scar.visible = false; L.add(scar)
+  addMark(tree.position.x, tree.position.z, 'Ped par nishan · Mark the tree', () => { scar.visible = true })
+  const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.04, 1.1, 6), new THREE.MeshStandardMaterial({ color: '#7a5a3a' }))
+  twig.rotation.set(Math.PI / 2, 0.4, 0); twig.position.set(FP.x + 6, 0.08, FP.z + 5); L.add(twig)
+  addMark(twig.position.x, twig.position.z, 'Daal todo · Break a branch', () => { twig.rotation.z = 1.1; twig.position.y = 0.05 })
+  const prints = new THREE.Group()
+  for (let i = 0; i < 4; i++) {
+    const pr = new THREE.Mesh(new THREE.CircleGeometry(0.11, 10), new THREE.MeshStandardMaterial({ color: '#4a3526', roughness: 1 }))
+    pr.rotation.x = -Math.PI / 2; pr.scale.set(0.7, 1.5, 1); pr.position.set(FP.x + 2 + i * 0.42, 0.03, FP.z - 5); prints.add(pr)
+  }
+  prints.visible = false; L.add(prints)
+  addMark(FP.x + 3, FP.z - 5, 'Mud mein nishan · Press a footprint', () => { prints.visible = true })
+
   const trig = (r) => G.until(() => G.auto || G.distToPlayer(bike.x, bike.z) < r)
   ui.toast('Bike saaf dikh rahi hai, sal ke ped ke neeche. Seedha chalo', 5)
   baseGoalTo(bike, 'Bike tak jao · To the bike')
@@ -227,12 +275,16 @@ async function loopScene(L, c, p, s) {
   await N('Matlab... ya toh ye humein bike tak le jayega, ya bike ki jagah le jayega.', 'Either it leads us to the bike... or to wherever the bike is meant to be.', { dur: 4.6 })
   await T('Bhai, ye options kaun deta hai?', 'Who gives these options?', { dur: 2.2 })
   await N('Koi nahi. Aur koi doosra option bhi nahi hai.', 'Nobody. And there is no other option.', { dur: 3 })
-  // walk behind the sound, slowly
+  // The sound leads away from the clearing: the bike is not where they left
+  // it. It waits deeper in the forest, where the footsteps finally stop.
+  const deep = { x: -34, z: 104 }
+  if (G.scooter) { G.scooter.place(deep.x, deep.z, 0.6); G.scooter.park() }
   ui.objective('Awaaz ke peeche, dheere dheere · Follow the footsteps, slowly'); ui.toast('Daudo mat. Awaaz ke peeche chalo', 5)
-  baseGoalTo(bike, 'Awaaz ke peeche · Follow the sound')
+  baseGoalTo(new THREE.Vector3(deep.x, 1, deep.z), 'Bike andar jungle mein · Bike deeper in the forest')
+  caption('[the sal tree and the clearing are behind them. The bike stands alone under a dark canopy]', 6)
   let k = 0, on = true
-  ;(async () => { try { while (on) { const f = Math.min(1, k / 24); audio.footstep('mud', 0.9, { x: FP.x + (bike.x - FP.x) * f, y: 0.1, z: FP.z + (bike.z - FP.z) * f }); k++; await wait(0.8) } } catch (e) {} })()
-  await G.until(() => G.auto || G.distToPlayer(bike.x, bike.z) < 3.2)
+  ;(async () => { try { while (on) { const f = Math.min(1, k / 24); audio.footstep('mud', 0.9, { x: FP.x + (deep.x - FP.x) * f, y: 0.1, z: FP.z + (deep.z - FP.z) * f }); k++; await wait(0.8) } } catch (e) {} })()
+  await G.until(() => G.auto || G.distToPlayer(deep.x, deep.z) < 3.5)
   on = false
   G.goal = null; ui.objective(null)
   setTime(18.63, 0, false, true); G.clockRate = 0

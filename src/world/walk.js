@@ -9,6 +9,16 @@ export class Walk {
   rect(x0, z0, x1, z1, name = '') { const r = { name, off: false, x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1) }; this.rects.push(r); return r }
   circle(x, z, r) { const c = { x, z, r }; this.circles.push(c); return c }
   box(x0, z0, x1, z1) { const b = { x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1) }; this.boxes.push(b); return b }
+  // Move the whole walkable layout so a level can be placed next to another.
+  translate(dx, dz) {
+    for (const c of this.corr) for (const p of c.pts) { p.x += dx; p.z += dz }
+    for (const d of this.discs) { d.x += dx; d.z += dz }
+    for (const r of this.rects) { r.x0 += dx; r.x1 += dx; r.z0 += dz; r.z1 += dz }
+    for (const c of this.circles) { c.x += dx; c.z += dz }
+    for (const b of this.boxes) { b.x0 += dx; b.x1 += dx; b.z0 += dz; b.z1 += dz }
+    if (this.bound) { this.bound.x0 += dx; this.bound.x1 += dx; this.bound.z0 += dz; this.bound.z1 += dz }
+    return this
+  }
   // signed distance to the walkable union (negative = inside), plus the nearest allowed point
   query(x, z, rad = 0) {
     if (this.free) return { d: -1, x, z }

@@ -1,6 +1,7 @@
 // Level base class + building / prop kit
 import * as THREE from 'three'
 import * as CANNON from 'cannon-es'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { tex, withPBR, worldUV } from './textures.js'
 import { Walk } from './walk.js'
 import { RNG, nearestOnPoly, R } from '../core/util.js'
@@ -76,11 +77,118 @@ export class Level {
     if (o.light !== false) { const L = new THREE.PointLight(o.color || '#ff9a3c', 0, o.dist || 11, 1.6); L.position.set(x, y + 0.05, z); this.group.add(L); this.flick.push({ light: L, base: o.int || 7, sp: R.range(6, 11), ph: R.range(0, 6), glow, mul: o.mul }); this.lights.push(L) }
     return g
   }
+  // Place this level somewhere else in the world (used by streaming: the next
+  // chapter's entrance is moved to the current chapter's exit). Visuals live in
+  // group, collision in walk/bodies, and coordinate-taking helpers are wrapped
+  // so they keep seeing their original local coordinates.
+  // Move and TURN the level so its entrance sits at (x,z) facing `yaw`.
+  // This is what lets the next chapter's trail continue in the direction the
+  // player is already walking instead of snapping to a new heading.
+  place(x, z, yaw) {
+    const sy = this.spawn.yaw || 0
+    const ry = (yaw === undefined ? sy : yaw) - sy
+    const c = Math.cos(ry), s = Math.sin(ry)
+    const rot = (lx, lz) => ({ x: lx * c + lz * s, z: -lx * s + lz * c })
+    const rs = rot(this.spawn.x, this.spawn.z)
+    const dx = x - rs.x, dz = z - rs.z
+    this.group.rotation.y += ry; this.group.position.x += dx; this.group.position.z += dz
+    const apply = (p) => {
+      if (!p) return
+      if (Array.isArray(p)) {
+        if (typeof p[0] !== 'number') return
+        if (p.length === 2) { const r = rot(p[0], p[1]); p[0] = r.x + dx; p[1] = r.z + dz }
+        else { const r = rot(p[0], p[2]); p[0] = r.x + dx; p[2] = r.z + dz }
+      } else if (typeof p === 'object' && typeof p.x === 'number' && typeof p.z === 'number') {
+        const r = rot(p.x, p.z); p.x = r.x + dx; p.z = r.z + dz
+      }
+    }
+    for (const co of this.walk.corr) for (const p of co.pts) apply(p)
+    for (const d of this.walk.discs) apply(d)
+    for (const d of this.walk.circles) apply(d)
+    const rect = (r) => {
+      const cs = [[r.x0, r.z0], [r.x1, r.z0], [r.x1, r.z1], [r.x0, r.z1]].map(([a, b]) => { const q = rot(a, b); return { x: q.x + dx, z: q.z + dz } })
+      r.x0 = Math.min(...cs.map(k => k.x)); r.x1 = Math.max(...cs.map(k => k.x))
+      r.z0 = Math.min(...cs.map(k => k.z)); r.z1 = Math.max(...cs.map(k => k.z))
+    }
+    for (const r of this.walk.rects) rect(r)
+    for (const r of this.walk.boxes) rect(r)
+    if (this.walk.bound) rect(this.walk.bound)
+    const yawQ = new CANNON.Quaternion(); yawQ.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), ry)
+    for (const b of this.bodies) {
+      const q = rot(b.position.x, b.position.z); b.position.x = q.x + dx; b.position.z = q.z + dz
+      b.quaternion.copy(yawQ.mult(b.quaternion))
+      if (b.previousPosition) { const p = rot(b.previousPosition.x, b.previousPosition.z); b.previousPosition.x = p.x + dx; b.previousPosition.z = p.z + dz }
+      if (b.interpolatedPosition) { const p = rot(b.interpolatedPosition.x, b.interpolatedPosition.z); b.interpolatedPosition.x = p.x + dx; b.interpolatedPosition.z = p.z + dz }
+    }
+    // Helpers receive world coordinates: undo rotation and translation first.
+    const inv = (wx, wz) => { const lx = wx - dx, lz = wz - dz; return { x: lx * c - lz * s, z: lx * s + lz * c } }
+    for (const k of ['groundY', 'heightAt', 'surface', 'isIndoors']) {
+      const f = this[k]
+      if (typeof f === 'function') this[k] = (wx, wz, ...rest) => { const p = inv(wx, wz); return f(p.x, p.z, ...rest) }
+    }
+    apply(this.spawn)
+    const points = (v) => { if (Array.isArray(v)) for (const p of v) apply(p) }
+    for (const t of this.trails || []) points(t.pts)
+    if (Array.isArray(this.core)) for (const poly of this.core) points(poly)
+    points(this.pts); points(this.entryPts)
+    if (this.rideCorr) points(this.rideCorr.pts)
+    apply(this.roam); apply(this.pit); apply(this.noPit)
+    if (Array.isArray(this.pits)) for (const p of this.pits) apply(p)
+    apply(this.house)
+    if (Array.isArray(this.doorHouses)) for (const h of this.doorHouses) apply(h)
+    for (const v of Object.values(this.refs || {})) { if (Array.isArray(v)) points(v); else apply(v) }
+    if (yaw !== undefined) this.spawn.yaw = yaw
+    this.placed = { x, z, yaw: this.spawn.yaw, ry, dx, dz }
+    return this
+  }
+  translate(dx, dz) { return this.place(this.spawn.x + dx, this.spawn.z + dz) }
   dispose() {
     (this.disposers || []).forEach(f => f()); this.disposers = []
     for (const b of this.bodies) this.G.world.removeBody(b); this.bodies = []
     this.group.traverse(o => { if (o.geometry) o.geometry.dispose() })
     this.G.scene.remove(this.group)
+  }
+}
+
+// Static props are built from many tiny sibling meshes (a house is ~20 boxes).
+// Collapse siblings that share a material into one geometry — this is the
+// single biggest draw-call saving on the road/town levels. Animated parts,
+// instanced meshes, transparent surfaces and story-referenced meshes are left
+// alone.
+export function mergeStaticMeshes(root, refs = []) {
+  const skip = new Set()
+  for (const v of refs) {
+    if (Array.isArray(v)) v.forEach(x => { if (x && x.isMesh) skip.add(x) })
+    else if (v && v.isMesh) skip.add(v)
+  }
+  const parents = []
+  root.traverse(o => { if (o.children && o.children.length) parents.push(o) })
+  for (const parent of parents) {
+    const groups = new Map()
+    for (const m of parent.children) {
+      if (!m.isMesh || m.isInstancedMesh || !m.visible || !m.geometry || !m.material) continue
+      if (Array.isArray(m.material) || m.material.transparent || skip.has(m)) continue
+      if (Object.keys(m.userData || {}).length) continue
+      let list = groups.get(m.material)
+      if (!list) groups.set(m.material, list = [])
+      list.push(m)
+    }
+    for (const list of groups.values()) {
+      if (list.length < 2) continue
+      const parts = []
+      for (const m of list) {
+        m.updateMatrix()
+        const g = m.geometry.clone(); g.applyMatrix4(m.matrix); parts.push(g)
+      }
+      const geo = mergeGeometries(parts, false)
+      parts.forEach(g => g.dispose())
+      if (!geo) continue
+      const merged = new THREE.Mesh(geo, list[0].material)
+      merged.castShadow = list.some(m => m.castShadow)
+      merged.receiveShadow = list.some(m => m.receiveShadow)
+      parent.add(merged)
+      for (const m of list) parent.remove(m)
+    }
   }
 }
 
@@ -101,7 +209,9 @@ export function buildHouse(L, o) {
   for (const r of rects) L.solid(r[0], r[1], r[2], r[3], h)
   // door leaf
   const hinge = new THREE.Group(); hinge.position.set(dl, 0, d / 2 + t / 2); g.add(hinge)
-  const leaf = bx(hinge, doorW - 0.04, 2.1, 0.06, S({ map: tex.wood('#4a3524') }), (doorW - 0.04) / 2, 0, 0); hinge.userData.open = 0
+  const leafMat = S({ map: tex.wood('#4a3524') })
+  const leaf = bx(hinge, doorW - 0.04, 2.1, 0.06, leafMat, (doorW - 0.04) / 2, 0, 0); hinge.userData.open = 0
+  sph(hinge, 0.026, leafMat, doorW - 0.16, 1.02, 0.055) // door handle shares the leaf material -> no extra draw call
   const dc = rotPt(rot, x, z, doorX, d / 2 + t / 2); const dh = doorW / 2
   const doorBox = { x0: dc[0] - (Math.abs(Math.cos(rot)) > 0.5 ? dh : 0.12), x1: dc[0] + (Math.abs(Math.cos(rot)) > 0.5 ? dh : 0.12), z0: dc[1] - (Math.abs(Math.cos(rot)) > 0.5 ? 0.12 : dh), z1: dc[1] + (Math.abs(Math.cos(rot)) > 0.5 ? 0.12 : dh) }
   const house = { group: g, hinge, w, d, x, z, rot, doorX, doorOpen: false, name, doorWorld: new THREE.Vector3(...[dc[0], 1.2, dc[1]]), light: [] }
@@ -118,6 +228,7 @@ export function buildHouse(L, o) {
   else {
     const sl = roof === 'tin' ? 0.22 : 0.5, rise = Math.tan(sl) * (d / 2 + 0.5), len = (d / 2 + 0.6) / Math.cos(sl)
     for (const s of [-1, 1]) { const rg = new THREE.BoxGeometry(w + 0.9, 0.08, len); if (worldUV(rm)) boxUV(rg, w + 0.9, 0.08, len, worldUV(rm)); const m = new THREE.Mesh(rg, rm); m.position.set(0, h + rise / 2 + 0.05, s * (d / 4 + 0.25)); m.rotation.x = s * sl; m.castShadow = true; g.add(m) }
+    bx(g, w + 0.95, 0.1, 0.14, rm, 0, h + rise + 0.04, 0) // ridge cap along the apex
     const shp = new THREE.Shape(); shp.moveTo(-d / 2 - 0.1, 0); shp.lineTo(d / 2 + 0.1, 0); shp.lineTo(0, rise); shp.closePath()
     for (const s of [-1, 1]) { const gm = new THREE.Mesh(new THREE.ShapeGeometry(shp), wm); gm.position.set(s * (w / 2 + 0.1), h, 0); gm.rotation.y = s * Math.PI / 2; g.add(gm) }
   }
@@ -127,6 +238,7 @@ export function buildHouse(L, o) {
     const pos = side === 's' ? [px, y, d / 2 + t + 0.012, 0] : side === 'n' ? [px, y, -d / 2 - t - 0.012, Math.PI] : side === 'e' ? [w / 2 + t + 0.012, y, px, Math.PI / 2] : [-w / 2 - t - 0.012, y, px, -Math.PI / 2]
     const pane = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), new THREE.MeshBasicMaterial({ color: wd.color || (wd.lit ? '#d9a050' : '#06080b') })); pane.position.set(pos[0], pos[1], pos[2]); pane.rotation.y = pos[3]; g.add(pane)
     const fr = bx(g, ww + 0.1, 0.05, 0.05, S({ color: '#3a2a1c' }), pos[0], pos[1] + hh / 2, pos[2]); fr.rotation.y = pos[3]
+    const sill = bx(g, ww + 0.18, 0.045, 0.12, wm, pos[0], pos[1] - hh / 2 - 0.05, pos[2]); sill.rotation.y = pos[3]
     if (wd.pale) { // two pale eye-like gaps seen through the shutter
       for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.CircleGeometry(0.045, 10), new THREE.MeshBasicMaterial({ color: '#e8efe8', transparent: true, opacity: 0.5, fog: true })); e.scale.set(1.5, 0.8, 1); e.position.set(pos[0], pos[1], pos[2] + 0.004); e.rotation.y = pos[3]; e.translateX(s * 0.13); e.translateY(0.05); g.add(e); e.userData.pale = true }
     }
@@ -152,11 +264,11 @@ export function stool() { const g = new THREE.Group(); bx(g, 0.32, 0.04, 0.32, w
 export function charpai() { const g = new THREE.Group(), m = wood(), rope = S({ map: tex.cloth('#6a5a3a', '#b8a070', 'check') }); bx(g, 1.0, 0.04, 1.9, m, 0, 0.38, 0); bx(g, 0.9, 0.02, 1.8, rope, 0, 0.4, 0); for (const sx of [-1, 1]) for (const sz of [-1, 1]) bx(g, 0.07, 0.4, 0.07, m, sx * 0.47, 0, sz * 0.92); return g }
 export function bed() {
   const g = new THREE.Group()
-  bx(g, 1.5, 0.35, 2.0, wood(), 0, 0, 0)
-  bx(g, 1.6, 0.7, 0.1, wood(), 0, 0.35, -1.02) // headboard
+  bx(g, 2.0, 0.36, 2.3, wood(), 0, 0, 0)          // king-size frame
+  bx(g, 2.1, 0.8, 0.1, wood(), 0, 0.36, -1.18)    // headboard
   // ONE fitted bedsheet over the whole mattress, with gentle wrinkles. Real
   // beds do not have two different patterns spliced down the middle.
-  const sh = new THREE.PlaneGeometry(1.42, 1.92, 12, 18)
+  const sh = new THREE.PlaneGeometry(1.92, 2.2, 12, 18)
   const p = sh.attributes.position
   for (let i = 0; i < p.count; i++) p.setZ(i, 0.016 * Math.sin(p.getX(i) * 9 + p.getY(i) * 3) + 0.01 * Math.sin(p.getY(i) * 11))
   sh.computeVertexNormals()
@@ -164,13 +276,12 @@ export function bed() {
   sheet.rotation.x = -Math.PI / 2; sheet.position.y = 0.455; g.add(sheet)
   // A single folded blanket at the FOOT only — same colour family, clearly a
   // folded layer on top of the sheet, not a second bedsheet.
-  const fold = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.42, 6, 4), S({ map: tex.cloth('#b7c9d8', '#e8eef2', 'stripe'), side: THREE.DoubleSide }))
-  fold.rotation.x = -Math.PI / 2; fold.position.set(0, 0.472, 0.74); g.add(fold)
-  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.4, 8), S({ color: '#c3d2de' }))
-  lip.rotation.z = Math.PI / 2; lip.position.set(0, 0.485, 0.53); g.add(lip)
-  // pillow: squashed sphere with a seam
-  const pillow = sph(g, 0.25, S({ color: '#e8e0d0', roughness: 1 }), 0, 0.6, -0.75, 1.45, 0.32, 0.9)
-  pillow.castShadow = true
+  const fold = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 0.5, 6, 4), S({ map: tex.cloth('#b7c9d8', '#e8eef2', 'stripe'), side: THREE.DoubleSide }))
+  fold.rotation.x = -Math.PI / 2; fold.position.set(0, 0.482, 0.86); g.add(fold)
+  const lip = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.9, 8), S({ color: '#c3d2de' }))
+  lip.rotation.z = Math.PI / 2; lip.position.set(0, 0.495, 0.64); g.add(lip)
+  // two pillows for the wider bed
+  for (const x of [-0.48, 0.48]) sph(g, 0.25, S({ color: '#e8e0d0', roughness: 1 }), x, 0.61, -0.9, 1.3, 0.32, 0.9).castShadow = true
   return g
 }
 export function fan(L, parent, x, y, z) { const g = new THREE.Group(); g.position.set(x, y, z); const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.06, 10), S({ color: '#ddd' })); g.add(hub); const blades = new THREE.Group(); for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.012, 0.13), S({ color: '#e8e4d8' })); b.position.x = 0.38; const p = new THREE.Group(); p.rotation.y = i * 2.094; p.add(b); blades.add(p) } g.add(blades); const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.25, 6), S({ color: '#444' })); rod.position.y = 0.15; g.add(rod); parent.add(g); L.updaters.push((dt) => { blades.rotation.y += dt * 9 }); return g }
@@ -274,19 +385,42 @@ export function signboard(text, bg = '#1f5a34', fg = '#f2f0e0', w = 2.2, h = 1.0
 export function bush(s = 1) { const g = new THREE.Group(), m = S({ map: tex.leaf() }); for (let i = 0; i < 4; i++) sph(g, 0.4 * s, m, R.range(-0.4, 0.4) * s, 0.35 * s, R.range(-0.4, 0.4) * s, 1, 0.8, 1); return g }
 export function can() { const g = new THREE.Group(); const m = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.12, 12), new THREE.MeshStandardMaterial({ color: '#c0161c', metalness: 0.8, roughness: 0.3 })); g.add(m); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.033, 0.01, 12), new THREE.MeshStandardMaterial({ color: '#ccc', metalness: 0.9, roughness: 0.3 })); t.position.y = 0.06; g.add(t); return g }
 export function ball() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshStandardMaterial({ map: tex.cloth('#e8e8e0', '#2a60b0', 'print'), roughness: 0.6 })); m.castShadow = true; return m }
-// A full-face riding helmet (men's / unisex sports shape), not a round bowl.
+// A full-face riding helmet with a hinged clear visor — the shape of a real
+// men's/unisex road helmet: oval crown, cheek guards, projecting chin bar,
+// top/side vents, neck roll and a shield that pivots up at the side hinges.
 // Reused on the rack, on the player's head and on the bike.
 export function ridingHelmet(color = '#c02020') {
   const g = new THREE.Group()
-  const shell = S({ color, roughness: 0.32, metalness: 0.14 })
-  const trim = S({ color: '#15191d', roughness: 0.28, metalness: 0.45 })
-  sph(g, 0.145, shell, 0, 0.055, 0, 1.0, 0.92, 1.05)          // crown
-  bx(g, 0.165, 0.075, 0.085, shell, 0, 0.005, 0.102)          // chin bar
-  const vis = bx(g, 0.156, 0.05, 0.014, trim, 0, 0.078, 0.132); vis.rotation.x = -0.14 // visor slot
-  bx(g, 0.014, 0.05, 0.075, trim, -0.13, 0.075, 0.01)         // side vents
-  bx(g, 0.014, 0.05, 0.075, trim, 0.13, 0.075, 0.01)
-  const roll = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.017, 6, 14), trim)
-  roll.rotation.x = Math.PI / 2; roll.position.y = -0.052; g.add(roll) // neck roll
+  const shell = S({ color, roughness: 0.28, metalness: 0.14 })
+  const trim = S({ color: '#14181c', roughness: 0.35, metalness: 0.45 })
+  const vent = S({ color: '#0b0e12', roughness: 0.55 })
+  const dome = (rx, ry, rz, x, y, z, seg = 20) => {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.15, seg, 14), shell)
+    m.scale.set(rx, ry, rz); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m
+  }
+  dome(1.0, 0.98, 1.12, 0, 0.055, -0.005)        // crown
+  dome(0.86, 0.8, 0.95, 0, 0.015, -0.07, 16)     // tapered nape
+  for (const s of [-1, 1]) dome(0.62, 0.78, 0.82, s * 0.093, -0.02, 0.03, 16) // cheek guards
+  dome(0.85, 0.56, 0.62, 0, -0.072, 0.085, 16)   // chin bar, projecting forward
+  bx(g, 0.052, 0.014, 0.075, vent, 0, 0.203, -0.01)            // top intake
+  for (const s of [-1, 1]) bx(g, 0.012, 0.032, 0.055, vent, s * 0.146, 0.045, -0.02)
+  const roll = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.018, 6, 18), trim)
+  roll.rotation.x = Math.PI / 2; roll.position.y = -0.095; g.add(roll) // neck roll
+  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.005, 5, 18), trim)
+  strap.rotation.x = Math.PI / 2; strap.position.y = -0.06; g.add(strap)
+  // visor: a curved shield on a side-hinged pivot (0 = down, -0.95 = up)
+  const visor = new THREE.Group(); visor.position.set(0, 0.108, 0.028); g.add(visor)
+  const shield = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.157, 0.157, 0.12, 22, 1, true, -Math.PI * 0.44, Math.PI * 0.88),
+    new THREE.MeshStandardMaterial({ color: '#101821', roughness: 0.12, metalness: 0.3, transparent: true, opacity: 0.66, side: THREE.DoubleSide, depthWrite: false })
+  )
+  shield.position.set(0, -0.062, 0); visor.add(shield)
+  for (const s of [-1, 1]) {
+    const hinge = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.008, 8), trim)
+    hinge.rotation.z = Math.PI / 2; hinge.position.set(s * 0.145, 0, 0.008); visor.add(hinge)
+  }
+  g.userData.visor = visor
+  g.userData.shield = shield
   return g
 }
 export function helmetRack() {
@@ -295,6 +429,7 @@ export function helmetRack() {
   g.userData.helmets = []; g.userData.helmetRack = true
   for (const x of [-0.18, 0.18]) {
     const h = ridingHelmet(x < 0 ? '#c02020' : '#22262a')
+    if (h.userData.visor) h.userData.visor.rotation.x = -0.95
     h.position.set(x, 1.56, 0.02); h.scale.setScalar(0.95)
     g.add(h); g.userData.helmets.push(h)
   }
@@ -315,6 +450,14 @@ export function motorbike(color = '#a31d1d', riding = false) {
   bx(lean, 0.6, 0.03, 0.03, chrome, 0, 1.02, 0.5)                    // handlebar
   const hl = sph(lean, 0.075, new THREE.MeshStandardMaterial({ color: '#fff', emissive: '#ffe9b0', emissiveIntensity: 0.4 }), 0, 0.95, 0.66)
   const pipe = bx(lean, 0.07, 0.07, 0.8, chrome, 0.16, 0.3, -0.25)
+  // small, cheap details that read as a real commuter bike
+  bx(lean, 0.32, 0.03, 0.2, dark, 0, 0.62, 0.68).rotation.x = -0.25        // front mudguard
+  sph(lean, 0.035, new THREE.MeshStandardMaterial({ color: '#8a1414', emissive: '#500000' }), 0, 0.82, -0.72) // tail lamp
+  for (const s of [-1, 1]) {
+    const stem = bx(lean, 0.015, 0.16, 0.015, chrome, s * 0.26, 1.08, 0.5)
+    stem.rotation.z = s * 0.35
+    sph(lean, 0.045, chrome, s * 0.3, 1.18, 0.5, 0.5, 0.8, 1)            // rear-view mirror
+  }
   g.userData.lean = lean; g.userData.headMesh = hl
   if (!riding) { lean.rotation.z = 0.16; lean.position.x = 0.1 }  // resting on its side stand
   return g

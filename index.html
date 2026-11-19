@@ -55,6 +55,7 @@
 <div id="choice" class="hidden"><div id="choice-q"></div><div id="choice-opts"></div></div>
 <div id="titlecard" class="hidden"><div id="tc-chapter"></div><div id="tc-title"></div><div id="tc-time"></div></div>
 <div id="fade" class="layer"></div>
+<div id="wakeblink" class="layer"></div>
 <div id="loading" class="hidden"><div class="ld-t">THE LAST WAY OUT</div><div class="ld-bar"><i></i></div><div class="ld-s">loading…</div><div class="ld-tip rot-tip" id="loading-tip"></div></div>
 <div id="dbg" class="hidden"></div>
 
@@ -137,8 +138,12 @@
   <label>Subtitles
     <select id="s-subs"><option value="both">Hinglish + English</option><option value="hi">Hinglish</option><option value="en">English</option><option value="off">Off</option></select></label>
   <label>Sound captions <input type="checkbox" id="s-caps" checked></label>
-  <label>Graphics
-    <select id="s-gfx"><option value="low">Low</option><option value="med" selected>Medium</option><option value="high">High</option></select></label>
+  <div class="gfx-block">
+    <label class="gfx-head">Graphics <span id="s-gfx-label" class="gfx-val">Medium</span></label>
+    <input type="range" id="s-gfx" min="0" max="3" step="1" value="1">
+    <div class="gfx-scale"><span>Low</span><span>Medium</span><span>High</span><span>Ultra</span></div>
+    <div class="gfx-foot"><span id="gfx-hint" class="gfx-hint"></span><button type="button" id="gfx-reco" class="gfx-reco">Use recommended</button></div>
+  </div>
   <label>Field of view <input type="range" id="s-fov" min="60" max="95" step="1" value="70"></label>
   <label>Subtitle size <input type="range" id="s-subsz" min="0.8" max="1.6" step="0.1" value="1"></label>
   <label>Navigation aid

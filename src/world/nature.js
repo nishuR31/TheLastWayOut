@@ -86,9 +86,11 @@ export function scatterForest(G, opts) {
     for (let k = 0; k < 3; k++) { cn.push(mtx(x + r.range(-1.2, 1.2), gy + h * (0.72 + k * 0.1), z + dz + r.range(-1.2, 1.2), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), cr * r.range(0.8, 1.1), r.range(0, 6))); col.setHSL(0.26 + r.range(-0.03, 0.04), 0.4, r.range(0.14, 0.26)); cc.push(col.clone()) }
     // Leafy silhouette instead of three bare balls: a few crossed foliage cards
     // around each crown break up the "lollipop" outline.
-    for (let k = 0; k < 4; k++) {
-      const a = r.range(0, 6.28), rad = cr * r.range(0.5, 1.05)
-      lf.push(mtx(x + Math.cos(a) * rad, gy + h * r.range(0.78, 1.0), z + dz + Math.sin(a) * rad, cr * r.range(0.8, 1.2), cr * r.range(0.8, 1.2), 1, a, r.range(-0.5, 0.2)))
+    for (let k = 0; k < 6; k++) {
+      const a = r.range(0, 6.28), rad = cr * r.range(0.45, 1.1)
+      // lower cards flare outward so the crown reads as a canopy, not a ball
+      const low = k >= 4 ? 0.14 : 0
+      lf.push(mtx(x + Math.cos(a) * rad * (1 + low), gy + h * (r.range(0.78, 1.0) - low), z + dz + Math.sin(a) * rad * (1 + low), cr * r.range(0.8, 1.25), cr * r.range(0.8, 1.2), 1, a, r.range(-0.5, 0.2)))
     }
     if (opts.walk && (opts.allTrees || nearestOnPoly(opts.trails[0].pts, x, z).d < (opts.trails[0].hw + 14))) opts.walk.circle(x, z + dz, tw * 1.05 + 0.1)
   }

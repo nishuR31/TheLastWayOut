@@ -17,10 +17,36 @@ for tok in open('tools/lexicon.txt', encoding='utf8').read().split():
 def dev(t):
     t = re.sub(r'\([^)]*\)\s*', '', t).replace('’', "'")
     t = re.sub(r"[A-Za-z]+", lambda m: lex.get(m.group(0).lower(), m.group(0).lower()), t)
-    t = re.sub(r'\.\.\.|…', ', ', t).replace('—', ', ')
+    t = re.sub(r'\.\.\.', '…', t).replace('—', ', ')   # keep acting beats; do not flatten them
     t = re.sub(r'(?<=[\u0900-\u097F])\.(?=\s|$)', '।', t)
     return t.strip()
-def en_clean(t): return re.sub(r'\([^)]*\)\s*', '', t).replace('—', ', ').replace('...', ', ').strip()
+def en_clean(t): return re.sub(r'\([^)]*\)\s*', '', t).replace('—', ', ').replace('...', '…').strip()
+
+# TTS-only acting pass. Subtitles and line hashes keep the story text; only the
+# spoken text gets pauses, beats and emphasis so the delivery sounds performed
+# instead of read flat. Applied before Hinglish -> Devanagari conversion.
+_STARTERS = (r'(Haan|Ha|Nahi|Na|Bas|Theek hai|Achha|Arre|Oye|Bhai|Chal|Dekh|Sun|Uncle|Chacha|Mummy|'
+             r'Yes|Yeah|No|Okay|Alright|Look|Listen|Come on|Wait|Well|So|But|And|Now)')
+def act(t):
+    t = re.sub(r'\s+', ' ', t.strip()).replace('’', "'").replace('...', '…')
+    # a short opening acknowledgement gets a breath, not a clipped stop
+    t = re.sub(r'^' + _STARTERS + r'\.\s+', r'\1… ', t)
+    t = re.sub(r'^' + _STARTERS + r'\s+', r'\1, ', t)
+    # a hard stop between two very short clauses reads like a list; soften it
+    t = re.sub(r'(?<=[a-z])\. (?=[A-Z][a-z]{1,6}\b)', ', ', t)
+    # short standalone lines land with a breath instead of a robot-full-stop
+    if len(t) < 26 and not any(c in t for c in '?!…'):
+        t = t.rstrip('.') + '…'
+    return t.strip()
+
+# punctuation-driven prosody: questions lift, exclamations push, beats slow down
+def tune(text, rate, pitch):
+    r = int(rate.replace('%', '')); q = int(pitch.replace('Hz', ''))
+    if '!' in text: q += 8; r += 4
+    if '…' in text: r -= 7; q -= 3
+    if '?' in text: r -= 3; q += 5
+    if len(text) < 22: r -= 4
+    return f'{r:+d}%', f'{q:+d}Hz'
 # who -> (hindi voice, hi rate, hi pitch, english voice, en rate, en pitch)
 V = {
  'Nishan':   ('hi-IN-MadhurNeural',            '+0%',  '+0Hz',  'en-IN-PrabhatNeural',   '+0%',  '+0Hz'),
@@ -52,6 +78,7 @@ async def one(k, l, lang, voice, rate, pitch, text, whisper):
         l['d_' + lang] = round(dur(ogg), 2); return 0
     if not text.strip(' ,.'): l.pop('d_' + lang, None); return 0
     if whisper: rate = f'{int(rate[:-1]) - 10:+d}%'
+    rate, pitch = tune(text, rate, pitch)
     mp3 = f'/tmp/vo/{lang}_{k}.mp3'
     async with sem:
         for attempt in range(4):
@@ -67,9 +94,9 @@ async def main():
         if ONLY and l['who'] != ONLY: continue
         hv, hr, hp, ev, er, ep = V.get(l['who'], DEF)
         whisper = bool(re.search(r'\((fusfusakar|whisper)', l['hi'], re.I)) or l['en'].lower().startswith('(whisper')
-        en_txt = en_clean(l['en'])
-        if not en_txt.strip(' ,.') and l['who'] == 'Awaaz': en_txt = dev(l['hi']); ev = hv  # stage-direction-only English: speak the called words
-        jobs.append(one(k, l, 'hi', hv, hr, hp, dev(l['hi']), whisper)); jobs.append(one(k, l, 'en', ev, er, ep, en_txt, whisper))
+        en_txt = en_clean(act(l['en']))
+        if not en_txt.strip(' ,.…') and l['who'] == 'Awaaz': en_txt = dev(act(l['hi'])); ev = hv  # stage-direction-only English: speak the called words
+        jobs.append(one(k, l, 'hi', hv, hr, hp, dev(act(l['hi'])), whisper)); jobs.append(one(k, l, 'en', ev, er, ep, en_txt, whisper))
     r = await asyncio.gather(*jobs); print('rendered', sum(r), 'clips of', len(jobs))
 asyncio.run(main())
 json.dump(L, open('public/voice/lines.json', 'w'), ensure_ascii=False, indent=1)

@@ -29,7 +29,10 @@ export const companionAI = {
       reactPos: null, reactT: 0,
       freezeT: 0, pointT: 0, didPoint: false,
       cooldown: 0, lookT: 0, lookPos: null,
-      goalT: R.range(8, 16)
+      goalT: R.range(8, 16),
+      // self-directed life: his own errands, leading, and getting his bearings
+      wanderT: 0, wanderPos: null, leadT: 0, lostT: 0, recovery: 0,
+      stuckT: 0, navT: 0
     }
   },
 
@@ -111,15 +114,49 @@ export const companionAI = {
     // A held glance the follower's own look logic cannot immediately erase.
     if (a.lookT > 0 && a.lookPos) { c.look(a.lookPos); return }
 
-    // While the day is still ordinary, he occasionally eyes the waypoint —
-    // the friend who keeps asking "ye kya hai?" before any of this went wrong.
-    if (a.state === 'calm' && G.goal) {
+    // ---- self-directed life -------------------------------------------------
+    // He has errands of his own: he can wander a few metres, walk ahead toward
+    // the waypoint, and lose his bearings for a moment instead of rubber-
+    // banding to the player. Story control above always wins.
+    const dp = Math.hypot(c.pos.x - p.pos.x, c.pos.z - p.pos.z)
+    if (dp > 11 && a.recovery <= 0) { a.lostT += dt; if (a.lostT > 2.5) { a.recovery = 6; a.lostT = 0 } }
+    else if (dp < 6) a.lostT = 0
+    if (a.recovery > 0) {
+      a.recovery -= dt
+      c.look({ x: p.pos.x, y: 1.5, z: p.pos.z }); c.face(p.pos)
+      if (a.recovery < 3.5) { c.path = [{ x: p.pos.x, z: p.pos.z }]; c.walkSpeed = 3.2 }
+      else c.path = []
+      return
+    }
+    if (a.wanderT > 0 && a.wanderPos) {
+      a.wanderT -= dt
+      const d = Math.hypot(c.pos.x - a.wanderPos.x, c.pos.z - a.wanderPos.z)
+      if (d > 0.9) {
+        c.path = [{ x: a.wanderPos.x, z: a.wanderPos.z }]; c.walkSpeed = 1.15
+        c.look(a.wanderPos); c.face(a.wanderPos); return
+      }
+      a.wanderT = 0; c.path = []
+    }
+    if (a.leadT > 0 && G.goal) {
+      a.leadT -= dt
+      const g = G.goal
+      if (Math.hypot(c.pos.x - g.x, c.pos.z - g.z) > 2 && dp < 14) {
+        c.path = [{ x: g.x, z: g.z }]; c.walkSpeed = 2.2; c.face(g); c.look({ x: g.x, y: 1.5, z: g.z }); return
+      }
+      a.leadT = 0; c.path = []
+    }
+    if ((a.state === 'calm' || a.state === 'uneasy') && c.path.length === 0 && dp < 12) {
       a.goalT -= dt
       if (a.goalT <= 0) {
-        a.goalT = R.range(10, 20)
-        a.lookT = 1.5
-        a.lookPos = { x: G.goal.x, y: 1.5, z: G.goal.z }
-        c.look(a.lookPos)
+        a.goalT = R.range(18, 32)
+        const still = Math.abs(p.vel || 0) < 0.4
+        if (still && Math.random() < 0.3 && G.goal) a.leadT = R.range(2, 3.5)
+        else {
+          // Errands stay in front of the player, never a full circle around them.
+          const ang = p.yaw + R.range(-1.0, 1.0), rad = R.range(2, 5)
+          a.wanderPos = { x: p.pos.x + Math.sin(ang) * rad, y: 1.4, z: p.pos.z + Math.cos(ang) * rad }
+          a.wanderT = R.range(2, 4)
+        }
       }
     }
   }

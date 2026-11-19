@@ -9,7 +9,7 @@ import { Actor } from './world/actors.js'
 import { lod } from './world/lod.js'
 import { clamp, damp, lerp, angDiff, fmtClock, R, nearestOnPoly } from './core/util.js'
 import { Scooter } from './world/scooter.js'
-import { motorbike } from './world/build.js'
+import { motorbike, mergeStaticMeshes } from './world/build.js'
 import { preloadPBR, tex } from './world/textures.js'
 import { nav } from './core/nav.js'
 import { phone } from './core/phone.js'
@@ -108,6 +108,7 @@ G.init = function (canvas) {
 // software GL), it just drops resolution and the most expensive overdraw.
 G.dropQuality = function () {
   G.cfg.gfx = 'low'; G.cfg.density = 0.4
+  try { window.dispatchEvent(new CustomEvent('tlwo-auto-gfx', { detail: { gfx: 'low' } })) } catch (e) {}
   G.renderer.setPixelRatio(0.5)
   if (G.scene) G.scene.traverse(o => {
     if (!o.isMesh || !o.material) return
@@ -122,12 +123,21 @@ G.setGfx = function (q) {
   // med defaults: 2000+ draw calls and 2M triangles per frame. Keep the scene
   // readable but make the default profile playable; 'high' keeps the full
   // shadows + density for people with a real GPU.
-  const pr = { low: 0.5, med: 0.7, high: Math.min(devicePixelRatio, 1.5) }[q]; G.renderer.setPixelRatio(pr)
-  G.cfg.density = { low: 0.4, med: 0.65, high: 1 }[q]; G.cfg.rain = { low: 0.25, med: 0.55, high: 1 }[q]
-  const sh = q === 'high'
+  const PR = { low: 0.5, med: 0.7, high: Math.min(devicePixelRatio, 1.5), ultra: Math.min(devicePixelRatio, 2) }
+  const DEN = { low: 0.4, med: 0.65, high: 1, ultra: 1.15 }
+  const RAIN = { low: 0.25, med: 0.55, high: 1, ultra: 1 }
+  G.renderer.setPixelRatio(PR[q] || PR.med)
+  G.cfg.density = DEN[q] || DEN.med; G.cfg.rain = RAIN[q] || RAIN.med
+  const solver = G.world && G.world.solver && (G.world.solver.solver || G.world.solver)
+  if (solver && solver.iterations !== undefined) solver.iterations = (q === 'high' || q === 'ultra') ? 20 : 12
+  const sh = q === 'high' || q === 'ultra'
   const shChanged = G.renderer.shadowMap.enabled !== sh
   G.renderer.shadowMap.enabled = sh; G.renderer.shadowMap.type = THREE.PCFSoftShadowMap
-  if (G.env) { G.env.sun.castShadow = sh; const m = q === 'high' ? 1024 : 512; if (G.env.sun.shadow.mapSize.x !== m) { G.env.sun.shadow.mapSize.set(m, m); if (G.env.sun.shadow.map) { G.env.sun.shadow.map.dispose(); G.env.sun.shadow.map = null } } }
+  if (G.env) {
+    G.env.sun.castShadow = sh
+    const m = q === 'ultra' ? 2048 : q === 'high' ? 1024 : 512
+    if (G.env.sun.shadow.mapSize.x !== m) { G.env.sun.shadow.mapSize.set(m, m); if (G.env.sun.shadow.map) { G.env.sun.shadow.map.dispose(); G.env.sun.shadow.map = null } }
+  }
   if (G.scene) G.scene.traverse(o => {
     // Alpha-tested foliage cards (ferns, grass, leaf silhouettes) cost a lot of
     // overdraw with no real benefit at low resolution.
@@ -144,6 +154,8 @@ G.until = (fn, timeout = 0) => new Promise((res, rej) => { if (G.stopped) return
 G.waitSkippable = (s) => new Promise((res, rej) => { if (G.stopped) return rej('abort'); G.timers.push({ t: s, res, rej, skippable: true, el: 0 }) })
 G.abort = function () {
   G.stopped = true; G.runId++
+  G._walkthroughT = 0
+  if (G.retired) { for (const r of G.retired) { try { r.level.dispose() } catch (e) {} } G.retired = [] }
   const rej = [...G.timers, ...G.untils]; G.timers = []; G.untils = []
   rej.forEach(x => x.rej('abort')); if (G._choiceRej) G._choiceRej('abort')
   G.interacts.forEach(i => i.rej && i.rej('abort')); G.interacts = []
@@ -175,6 +187,11 @@ G.preload = function (names) {
   run()
 }
 G.loadLevel = async function (name, opts = {}) {
+  if (opts.stream) {
+    const L = await G.streamLevel(name, opts)
+    if (L) return L
+  }
+  G._walkthroughT = 0
   vm.reset()
   const ld = document.getElementById('loading')
   const closeLoading = () => { ld.classList.add('hidden'); G.loadingVisible = false }
@@ -198,7 +215,8 @@ G.loadLevel = async function (name, opts = {}) {
     await nextFrame()
     const L = mod.build(G, opts); G.level = L; G.scene.add(L.group)
     if (L.core && L.roam && !L.pits) placePits(L, G); items.scan(G, L); fire.populate(G, L)
-    G.interacts = []
+    mergeStaticMeshes(L.group, Object.values(L.refs || {}))
+    // Keep interactions the level builder registered (gatekeepers, shopkeepers)
     // Rolling levels provide groundY; flat levels (road, home, tea, hospital)
     // do not — fall back to y=0 instead of throwing.
     const gy = L.groundY || (() => 0)
@@ -216,6 +234,68 @@ G.loadLevel = async function (name, opts = {}) {
     closeLoading()
   }
 }
+// Build the next chapter at the player's current world position so the walk
+// continues without a loading screen or a teleport. The old level stays visible
+// briefly, then is disposed; the companion and camera heading are preserved.
+G.streamLevel = async function (name, opts = {}) {
+  const loader = LEVELS['./levels/' + name + '.js']
+  if (typeof loader !== 'function') return null
+  const mod = G.levels[name] || await loader()
+  G.levels[name] = mod
+  await preloadPBR()
+  const old = G.level
+  const oldActors = G.actors.slice()
+  const keep = G.comp
+  const before = { x: G.player.pos.x, y: G.player.pos.y, z: G.player.pos.z, yaw: G.player.yaw }
+  if (old) for (const b of old.bodies) b.collisionFilterMask = 0
+  const L = mod.build(G, opts)
+  mergeStaticMeshes(L.group, Object.values(L.refs || {}))
+  // Put the new area a short walk AHEAD, not on top of the player, and give
+  // them a real path into it. No camera cut, no blink — just walking forward.
+  const fwd = { x: Math.sin(before.yaw), z: Math.cos(before.yaw) }
+  const target = { x: before.x + fwd.x * 12, z: before.z + fwd.z * 12 }
+  L.place(target.x, target.z, before.yaw)
+  L.walk.corridor([{ x: before.x, z: before.z }, { x: target.x, z: target.z }], 2.6, 'handoff')
+  const nx = -fwd.z, nz = fwd.x, hw = 2.4
+  const rp = [
+    before.x + nx * hw, 0.014, before.z + nz * hw,
+    before.x - nx * hw, 0.014, before.z - nz * hw,
+    target.x + nx * hw, 0.014, target.z + nz * hw,
+    target.x - nx * hw, 0.014, target.z - nz * hw
+  ]
+  const rg = new THREE.BufferGeometry()
+  rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.setIndex([0, 1, 2, 1, 3, 2]); rg.computeVertexNormals()
+  const ribbon = new THREE.Mesh(rg, new THREE.MeshStandardMaterial({ color: 0x9a7a52, roughness: 1, side: THREE.DoubleSide }))
+  G.scene.add(ribbon)
+  L.disposers.push(() => { G.scene.remove(ribbon); ribbon.geometry.dispose(); ribbon.material.dispose() })
+  G._walkthroughT = 4
+  G.scene.add(L.group)
+  // Keep the previous world rendered: it is retired only once the player has
+  // walked away from it (or spent a while in the new one). Adjacent chapters
+  // therefore stay co-rendered instead of vanishing after a fixed 1.2 s.
+  if (old) {
+    const retired = (G.retired || (G.retired = []))
+    // Only the immediately previous world stays co-rendered — more than that
+    // would double/triple the draw calls on the target hardware.
+    while (retired.length) { const r = retired.shift(); try { r.level.dispose() } catch (e) {} }
+    retired.push({ level: old, t: 0 })
+  }
+  // Replace the old crowd but keep the companion walking with the player.
+  for (const a of oldActors) if (a !== keep) a.dispose()
+  const fresh = G.actors.filter(a => !oldActors.includes(a))
+  G.actors = fresh.slice()
+  if (keep && !G.actors.includes(keep)) G.actors.push(keep)
+  if (keep) { keep.pos.set(before.x - 1.3, keep.pos.y, before.z - 1.3); keep.path = [] }
+  lod.clear()
+  for (const a of G.actors) if (a.P) lod.register(a.P)
+  G.level = L
+  G.pit = null; G.showBody = false; G.bodyPose = null
+  G.player.pos.set(before.x, L.groundY ? L.groundY(before.x, before.z) : before.y, before.z)
+  G.player.yaw = before.yaw
+  G._streamed = true; G._streamedChapter = true
+  return L
+}
+
 G.addActor = function (outfit, over) { const a = new Actor(G, outfit, over); G.actors.push(a); return a }
 G.removeActor = function (a) { const i = G.actors.indexOf(a); if (i >= 0) G.actors.splice(i, 1); a.dispose(); if (G.comp === a) G.comp = null }
 
@@ -234,12 +314,33 @@ function companionUpdate(dt) {
   const c = G.comp; if (!c || c.attach) return
   const p = G.player, pf = { x: Math.sin(p.yaw), z: Math.cos(p.yaw) }, pr = { x: -pf.z, z: pf.x }
   const dxp = p.pos.x - c.pos.x, dzp = p.pos.z - c.pos.z, dp = Math.hypot(dxp, dzp)
+  // Autonomous steering: look ahead and pick a clear detour instead of walking
+  // straight into a tree. He walks himself to the player rather than snapping.
+  const steerTo = (tx, tz, speed) => {
+    const walk = G.level && G.level.walk
+    let dx = tx - c.pos.x, dz = tz - c.pos.z
+    const d = Math.hypot(dx, dz) || 1
+    if (walk && walk.query) {
+      const ax = dx / d, az = dz / d
+      if (walk.query(c.pos.x + ax * 1.7, c.pos.z + az * 1.7, 0.45).d > 0) {
+        let best = null
+        for (const off of [0.65, -0.65, 1.25, -1.25, 1.9, -1.9]) {
+          const a = Math.atan2(ax, az) + off
+          const nx = c.pos.x + Math.sin(a) * 1.7, nz = c.pos.z + Math.cos(a) * 1.7
+          const q = walk.query(nx, nz, 0.45)
+          if (q.d <= 0 && (!best || q.d < best.d)) best = { x: nx, z: nz, d: q.d }
+        }
+        if (best) { tx = best.x; tz = best.z }
+      }
+    }
+    c.path = [{ x: tx, z: tz }]; c.walkSpeed = speed
+  }
   c.alertT = Math.max(0, c.alertT - dt)
   if (G.assistT > 0 && G.scooter && p.push && c.mode === 'follow') {
     const sc = G.scooter, f = sc.fwd(), cp = sc.chassis.position
     const tx = cp.x - f.x * 0.45 - f.z * 0.8, tz = cp.z - f.z * 0.45 + f.x * 0.8, d = Math.hypot(tx - c.pos.x, tz - c.pos.z)
     c.assisting = true; c.pose(d < 0.7 ? 'push' : 'stand'); c.look(null)
-    if (d > 0.2) { c.path = [{ x: tx, z: tz }]; c.walkSpeed = clamp(d * 2.4, 0.6, 2.6) } else { c.path = []; c.face(sc.yaw) }
+    if (d > 0.2) { steerTo(tx, tz, clamp(d * 2.4, 0.6, 2.6)) } else { c.path = []; c.face(sc.yaw) }
     return
   } else if (c.assisting) { c.assisting = false; c.pose('stand') }
   if (c.mode === 'follow') {
@@ -252,9 +353,14 @@ function companionUpdate(dt) {
       const off = pushing ? { f: 0.2, r: 1.2 * c.sideSign } : moving ? { f: -1.3 * fearK, r: -1.0 * c.sideSign * fearK } : { f: -0.5, r: -1.6 * c.sideSign * fearK }
       const tx = p.pos.x + pf.x * off.f + pr.x * off.r, tz = p.pos.z + pf.z * off.f + pr.z * off.r
       const d = Math.hypot(tx - c.pos.x, tz - c.pos.z)
-      if (d > 0.8) { const sp = clamp(d * 1.7, 0.6, running || dp > 7 ? 3.6 : 2.5) * (1 - G.player.tired * 0.25); c.path = [{ x: tx, z: tz }]; c.walkSpeed = sp } else { c.path = []; c.face(Math.atan2(pf.x, pf.z)) }
+      if (d > 0.8) { const sp = clamp(d * 1.7, 0.6, running || dp > 7 ? 3.6 : 2.5) * (1 - G.player.tired * 0.25); steerTo(tx, tz, sp) } else { c.path = []; c.face(Math.atan2(pf.x, pf.z)) }
       // never stand in the player's way
-      if (dp < 0.9 && !pushing) { const sx = c.pos.x - p.pos.x || 0.1, sz = c.pos.z - p.pos.z || 0.1, l = Math.hypot(sx, sz); c.path = [{ x: c.pos.x + sx / l * 1.2, z: c.pos.z + sz / l * 1.2 }]; c.walkSpeed = 1.8 }
+      // Give way by dropping back behind the player, not by orbiting them.
+      c._avoidT = Math.max(0, (c._avoidT || 0) - dt)
+      if (dp < 0.7 && moving && !pushing && c._avoidT <= 0) {
+        c._avoidT = 2.5
+        steerTo(p.pos.x - pf.x * 1.5 - pr.x * 0.7, p.pos.z - pf.z * 1.5 - pr.z * 0.7, 1.8)
+      }
       // copies the player's crouch
       c.P.crouch += ((p.crouch > 0.5 ? 1 : 0) - c.P.crouch) * Math.min(1, dt * 6)
       c.P.tremble = G.fear > 0.55 ? (G.fear - 0.5) * 1.2 : 0
@@ -263,7 +369,12 @@ function companionUpdate(dt) {
       if (c.fidT) { c.fidT -= dt; if (c.fidT <= 0 || moving) { c.fidT = 0; if (c.P.pose === 'rub') c.pose('stand') } }
       // lost him? bring him back from behind, out of sight
       c.stuckT = (c.stuckT || 0) + (d > 4 && c.speed < 0.15 ? dt : 0); if (d < 3) c.stuckT = 0
-      if (dp > 16 || c.stuckT > 3) { const bx = p.pos.x - pf.x * 5 + pr.x * 1.5, bz = p.pos.z - pf.z * 5 + pr.z * 1.5; const q = { x: bx, z: bz }; if (G.level) G.level.walk.resolve(q, 0.4); c.place(q.x, q.z, p.yaw); c.stuckT = 0 }
+      // He finds his own way back — no rubber-band teleport. Only a truly
+      // impossible distance (e.g. a level change) forces a placement.
+      if ((dp > 16 || c.stuckT > 4) && !(c.ai && c.ai.recovery > 0)) {
+        steerTo(p.pos.x, p.pos.z, dp > 12 ? 3.8 : 2.8); c.stuckT = 0
+      }
+      if (dp > 45) { const q = { x: p.pos.x - pf.x * 3, z: p.pos.z - pf.z * 3 }; if (G.level) G.level.walk.resolve(q, 0.4); c.place(q.x, q.z, p.yaw); c.stuckT = 0 }
       c.idleLookT -= dt
       if (c.idleLookT <= 0) { c.idleLookT = R.range(2.5, 6); c.glance = R.next() < 0.6 ? { x: c.pos.x + R.range(-6, 6), y: 1.5, z: c.pos.z + R.range(-6, 6) } : null }
       if (dp < 3.5 && G.lookingNow) c.look(G.lookingNow); else if (c.glance && dp < 8 && !running) c.look(c.glance); else c.look({ x: p.pos.x + pf.x * 6, y: 1.4 - p.pitch * 3, z: p.pos.z + pf.z * 6 })
@@ -302,7 +413,7 @@ G.toggleEngine = function () {
   }
 }
 G.mount = function (sc) {
-  const p = G.player; p.mode = 'ride'; G.scooter = sc; G.engineOn = false; sc.parked = false
+  const p = G.player; p.mode = 'ride'; G.scooter = sc; G.engineOn = false; sc.parked = false; G.rideThrottle = 0
   sc.setStand && sc.setStand(false); sc.light(false); audio.st.engine = 0; audio.st.rpm = 0
   G.keyBusy = false
   // mounting does NOT start the engine — the player presses E to turn the key
@@ -311,14 +422,26 @@ G.mount = function (sc) {
   ui.show('speedo', true)
 }
 G.dismount = function (x, z) {
-  const p = G.player, sc = G.scooter; p.mode = 'walk'; audio.st.engine = 0; audio.st.rpm = 0; ui.show('speedo', false)
-  // stopping a running engine is an engine-stop, so its animation still plays here
-  if (G.engineOn && !G.keyBusy) {
-    G.keyBusy = true
-    vm.keyStop(sc, () => { sc.light(false); G.engineOn = false }).then(() => { G.keyBusy = false })
-  } else sc.light(false)
-  sc.park(); sc.setStand && sc.setStand(true); const f = sc.fwd(); const px = x ?? sc.chassis.position.x - f.z * 0.9, pz = z ?? sc.chassis.position.z + f.x * 0.9; p.pos.set(px, G.level && G.level.groundY ? G.level.groundY(px, pz) : 0, pz); p.yaw = sc.yaw
-  if (G.comp && G.comp.attach) { const c = G.comp; c.attach = null; c.pose('stand'); c.place(sc.chassis.position.x + f.z * 0.9, sc.chassis.position.z - f.x * 0.9, sc.yaw) }
+  const p = G.player, sc = G.scooter
+  if (!sc || G._dismountBusy) return
+  G._dismountBusy = true; G.keyBusy = true; p.canMove = false
+  const finish = () => {
+    p.mode = 'walk'; audio.st.engine = 0; audio.st.rpm = 0; ui.show('speedo', false)
+    sc.park(); sc.setStand && sc.setStand(true)
+    const f = sc.fwd(); const px = x ?? sc.chassis.position.x - f.z * 0.9, pz = z ?? sc.chassis.position.z + f.x * 0.9
+    p.pos.set(px, G.level && G.level.groundY ? G.level.groundY(px, pz) : 0, pz); p.yaw = sc.yaw
+    if (G.comp && G.comp.attach) { const c = G.comp; c.attach = null; c.pose('stand'); c.place(sc.chassis.position.x + f.z * 0.9, sc.chassis.position.z - f.x * 0.9, sc.yaw) }
+    G._dismountBusy = false; G.keyBusy = false; p.canMove = true
+  }
+  // engine first, then the leg-swing / step-down, and only then leave the bike
+  ;(async () => {
+    try {
+      if (G.engineOn) await vm.keyStop(sc, () => { sc.light(false); G.engineOn = false })
+      else sc.light(false)
+      await vm.dismount(sc, () => G.camShake(0.12))
+    } catch (e) { if (e !== 'abort') console.error(e) }
+    finally { finish() }
+  })()
 }
 // B: get on / start the scooter, or switch it off and get off
 G.toggleVisor = function () {
@@ -327,6 +450,12 @@ G.toggleVisor = function () {
   const v = document.getElementById('visor')
   if (v) v.classList.toggle('down', G.visorDown)
   audio.metalClack(); ui.toast(G.visorDown ? 'Visor neeche · Visor down' : 'Visor upar · Visor up', 1.6)
+}
+// hands lift the helmet on/off; the worn helmet's visor then follows G.visorDown
+G.helmetAnim = function (putOn, onDone) {
+  if (G._helmetBusy) return Promise.resolve()
+  G._helmetBusy = true; G.keyBusy = true; G._helmetPoseT = 1.05
+  return vm.helmetAnim(putOn, onDone).then(() => { G._helmetBusy = false; G.keyBusy = false })
 }
 G.canBoard = () => !!G.level && !G.noBoard && !(G.scooter && (G.scooter.punctured || G.scooter.dead))
 const nearScooter = (pos) => G.scooter && Math.hypot(pos.x - G.scooter.chassis.position.x, pos.z - G.scooter.chassis.position.z) < 3.6
@@ -361,7 +490,7 @@ G.bikeAction = function () {
   const p = G.player, sc = G.scooter
   if (!sc || G.keyBusy || G.camOverride) { const r = G.boardBlock(); if (r) ui.reason(r); return }
   if (p.push && p.mode !== 'ride' && !input.down('Shift')) { G.stopPush(); G.noRun = false }   // B while pushing: let go and get on
-  if (p.mode === 'ride') { if (Math.abs(sc.speed) > 2.2) { ui.reason('Pehle bike roko (Space) — tab hi utar sakte ho'); return } G.dismount(); return }
+  if (p.mode === 'ride') { if (G._dismountBusy) return; if (Math.abs(sc.speed) > 2.2) { ui.reason('Pehle bike roko (Space) — tab hi utar sakte ho'); return } G.dismount(); return }
   if (G.cur && nearScooter(G.cur.pos)) return       // a story prompt on the scooter handles B itself
   const blocked = G.boardBlock()
   if (blocked) { ui.reason(blocked); return }
@@ -387,13 +516,17 @@ G.toggleBikeHelmet = function () {
     ui.reason('Bike se door ho — helmet uske hook par latkaane ke liye paas jao'); return
   }
   if (G.helmetOnBike) {
-    G.helmetOnBike = false; G.hasHelmet = true
-    if (sc.setHelmet) sc.setHelmet(false)
-    audio.clang(sc.chassis.position, 0.5); ui.toast('Helmet utha liya [ic:helmet] · Helmet back on', 2.4)
+    G.helmetAnim(true, () => {
+      G.helmetOnBike = false; G.hasHelmet = true
+      if (sc.setHelmet) sc.setHelmet(false)
+      audio.clang(sc.chassis.position, 0.5)
+    }).then(() => ui.toast('Helmet utha liya [ic:helmet] · Helmet back on', 2.4))
   } else if (G.hasHelmet) {
-    G.helmetOnBike = true; G.hasHelmet = false
-    if (sc.setHelmet) sc.setHelmet(true)
-    audio.click(); ui.toast('Helmet bike ke pichhle hook par latka diya · Helmet hung on the bike', 2.6)
+    G.helmetAnim(false, () => {
+      G.helmetOnBike = true; G.hasHelmet = false
+      if (sc.setHelmet) sc.setHelmet(true)
+      audio.click()
+    }).then(() => ui.toast('Helmet bike ke pichhle hook par latka diya · Helmet hung on the bike', 2.6))
   } else ui.reason('Paas helmet nahi hai — pehle rack se uthao (E)')
   items.reconcile(G)
 }
@@ -453,6 +586,8 @@ G.turnTo = async function (pos, dur = 0.9) {
 //   handheld: subtle breathing sway in metres (horror beats feel less clinical).
 //   ease:     'in' | 'out' | 'linear' (default smoothstep).
 G.shot = async function (sh) {
+  // At a chapter handoff the camera belongs to the player: no crane move.
+  if (G._walkthroughT > 0) return
   const o = G.camOverride = { pos: sh.from.clone(), look: sh.lookFrom.clone(), fov: sh.fov || 62, snap: true }
   const fov0 = sh.fov || 62, fov1 = sh.fov1 || fov0; let el = 0
   const from = sh.from.clone(), to = sh.to.clone()
@@ -536,6 +671,7 @@ function loop(now) {
 G.step = function (dt) {
   const p = G.player, L = G.level
   if (!L) return
+  if (G._walkthroughT > 0) G._walkthroughT -= dt
   // timers
   for (let i = G.timers.length - 1; i >= 0; i--) { const t = G.timers[i]; t.t -= dt * (G.timeScale || 1); if (t.skippable) { t.el += dt; if (t.el > 0.5 && (input.hit('Space') || input.hit('Enter'))) t.t = 0 } if (t.t <= 0) { G.timers.splice(i, 1); t.res() } }
   for (let i = G.untils.length - 1; i >= 0; i--) { const u = G.untils[i]; u.el += dt; let ok = false; try { ok = u.fn() } catch (e) { console.error(e) } if (ok || (u.t && u.el >= u.t)) { G.untils.splice(i, 1); u.res(ok) } }
@@ -543,8 +679,25 @@ G.step = function (dt) {
   playerUpdate(dt)
   roamUpdate(G, dt); fire.update(G, dt)
   // physics
-  G.world.step(1 / 120, dt, 8) // 120 Hz fixed substeps keep fast bike contacts stable
-  if (G.scooter) { const sc = G.scooter; if (p.mode === 'ride') { const ax = input.axis(); sc.drive(dt, (G.engineOn === false || G.keyBusy) ? 0 : ax.y, ax.x, input.down('Space') || !!G.keyBusy, Math.min(G.rideMax || 42, G.surfaceCap(sc.chassis.position))); sc.uprightCheck(dt); rideBound(sc) } else if (p.push) pushScooter(dt); else sc.park(); sc.sync(dt); audio.st.rpm = clamp(Math.abs(sc.speed) / 42, 0, 1); ui.show('speedo', p.mode === 'ride'); if (p.mode === 'ride') document.getElementById('speedo-v').textContent = Math.round(Math.abs(sc.speed) * 3.6) }
+  // 120 Hz substeps are only needed for fast contact on the stronger presets;
+  // 60 Hz halves the solver cost on integrated graphics without changing feel.
+  const hz = (G.cfg.gfx === 'high' || G.cfg.gfx === 'ultra') ? 120 : 60
+  G.world.step(1 / hz, dt, hz === 120 ? 8 : 5)
+  if (G.scooter) { const sc = G.scooter; if (p.mode === 'ride') {
+    const ax = input.axis()
+    const want = (G.engineOn === false || G.keyBusy) ? 0 : ax.y
+    G.rideThrottle = damp(G.rideThrottle || 0, want, want > (G.rideThrottle || 0) ? 1.6 : 3.4, dt)
+    sc.drive(dt, G.rideThrottle, ax.x, input.down('Space') || !!G.keyBusy, Math.min(G.rideMax || 42, G.surfaceCap(sc.chassis.position))); sc.uprightCheck(dt); rideBound(sc)
+  } else if (p.push) pushScooter(dt); else sc.park(); sc.sync(dt); audio.st.rpm = clamp(Math.abs(sc.speed) / 42, 0, 1); ui.show('speedo', p.mode === 'ride'); if (p.mode === 'ride') document.getElementById('speedo-v').textContent = Math.round(Math.abs(sc.speed) * 3.6) }
+  // Retired (already streamed-through) levels stay visible until the player is
+  // well away from them, so the handoff reads as one continuous world.
+  if (G.retired && G.retired.length) {
+    for (let i = G.retired.length - 1; i >= 0; i--) {
+      const r = G.retired[i]; r.t += dt
+      const d = Math.hypot(p.pos.x - r.level.spawn.x, p.pos.z - r.level.spawn.z)
+      if (r.t > 40 || d > 150) { try { r.level.dispose() } catch (e) {}; G.retired.splice(i, 1) }
+    }
+  }
   L.update(dt)
   for (const a of G.actors) a.update(dt)
   lod.update(G.camera.position, p.pos, dt)
@@ -662,15 +815,18 @@ function pushScooter(dt) {
   // the controlling rider walks beside the front of the bike with both hands on
   // the handlebars — the bike sits just ahead and to their right, not far behind
   const side = { x: -f.z, z: f.x }
-  const tgt = { x: p.pos.x + f.x * 0.72 + side.x * 0.3, z: p.pos.z + f.z * 0.72 + side.z * 0.3 }
-  G.level.walk.resolve(tgt, 0.3)
+  // The handlebar sits ~0.62 m ahead of the chassis. Put it just in front of
+  // the player's hands, so the bike's centre ends up slightly BEHIND them and
+  // they push from the bars — not from the tail wheel like the old offset did.
+  const tgt = { x: p.pos.x - f.x * 0.24 + side.x * 0.12, z: p.pos.z - f.z * 0.24 + side.z * 0.12 }
+  G.level.walk.resolve(tgt, 0.28)
   const dx = tgt.x - c.position.x, dz = tgt.z - c.position.z
   c.velocity.x = dx * 9; c.velocity.z = dz * 9
   const dy = angDiff(sc.yaw, p.yaw); c.angularVelocity.y = dy * 6; sc.steer = damp(sc.steer, clamp(dy * 1.5, -0.5, 0.5), 5, dt)
   sc.vehicle.setSteeringValue(-sc.steer, 0); sc.vehicle.setSteeringValue(-sc.steer, 1)
   sc.vehicle.wheelInfos.forEach((w, i) => { sc.vehicle.setBrake(0, i); sc.vehicle.applyEngineForce(0, i) })
   // stay near player
-  if (Math.hypot(c.position.x - p.pos.x, c.position.z - p.pos.z) > 3) { c.position.x = tgt.x; c.position.z = tgt.z }
+  if (Math.hypot(c.position.x - p.pos.x, c.position.z - p.pos.z) > 1.6) { c.position.x = tgt.x; c.position.z = tgt.z }
   sc.lean = damp(sc.lean, 0, 3, dt); sc.parked = false
   // wheel roll visual from speed
   const sp = Math.hypot(c.velocity.x, c.velocity.z); sc.vehicle.currentVehicleSpeedKmHour = sp * 3.6 * (dx * f.x + dz * f.z >= 0 ? 1 : -1)
@@ -678,7 +834,9 @@ function pushScooter(dt) {
 }
 
 function updateInteract(dt) {
-  items.reconcile(G) // self-heal item state drift every frame (world vs pocket)
+  // self-heal item state drift (world vs pocket) — 4 Hz is plenty
+  G._reconT = (G._reconT || 0) - dt
+  if (G._reconT <= 0) { items.reconcile(G); G._reconT = 0.25 }
   const p = G.player; let best = null, bd = 1e9
   if (p.canMove && p.mode !== 'ride') {
     const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw)
@@ -719,9 +877,11 @@ function updateInteract(dt) {
 function updateCameraBase(dt) {
   // helmet narrows peripheral vision; the dropped visor narrows it further
   const hv = document.getElementById('helmetvision')
-  if (hv) hv.style.opacity = G.hasHelmet ? (G.visorDown ? '0.66' : '0.3') : '0'
+  if (hv) hv.style.opacity = G.hasHelmet ? (G.visorDown ? '0.72' : '0.34') : '0'
   const brow = document.getElementById('helmetbrow')
-  if (brow) brow.style.opacity = G.hasHelmet ? (G.visorDown ? '0' : '0.8') : '0' // visor replaces the brow when down
+  if (brow) brow.style.opacity = G.hasHelmet ? (G.visorDown ? '0.18' : '0.95') : '0' // the shield replaces the shell rim when lowered
+  const vv = document.getElementById('visor')
+  if (vv) vv.classList.toggle('down', !!(G.hasHelmet && G.visorDown))
   const fx = document.getElementById('speedfx')
   if (fx && (!G.player || G.player.mode !== 'ride' || G.camOverride)) fx.style.opacity = '0'
   const p = G.player, cam = G.camera
@@ -741,7 +901,7 @@ function updateCameraBase(dt) {
     { const px = sc.chassis.position.x, pz = sc.chassis.position.z; p.pos.set(px, G.level && G.level.groundY ? G.level.groundY(px, pz) : 0, pz) }
     cam.fov = lerp(cam.fov, ((G.cfg.fov || 70) + fast * (G.visorDown ? 7 : 12)) * horror.fovFactor(), 0.05); cam.updateProjectionMatrix(); return
   }
-  const eye = p.eyeH - p.crouch * 0.75 - p.headDip
+  const eye = p.eyeH - p.crouch * 0.75 - p.headDip - (G._sit ? 0.42 : 0)
   const bob = Math.sin(p.bobT) * 0.035 * (1 - p.crouch * 0.4) * (1 + p.tired * 0.4), sway = Math.cos(p.bobT * 0.5) * 0.02
   ex = p.pos.x; ez = p.pos.z; ey = p.pos.y + eye + bob
   const sh = G.shake; G.shake = Math.max(0, G.shake - dt * 1.2)
@@ -752,6 +912,8 @@ function updateCameraBase(dt) {
 
 G.tpp = false
 G.toggleCam = function () { G.tpp = !G.tpp; audio.click(); ui.toast(G.tpp ? 'Teesra view (TPP) · X se wapas' : 'Pehla view (FPP)', 1.6) }
+// Sitting on a bench/chair lowers the eye line and poses the third-person body.
+G.sit = function (on) { G._sit = !!on; G.bodyPose = on ? 'sit' : null }
 // cinematic scene transitions: a crane move instead of a fade to black
 G.cine = { k: 0, target: 0, rate: 1 }
 G.cineSet = (k) => { G.cine.k = k; G.cine.target = k }

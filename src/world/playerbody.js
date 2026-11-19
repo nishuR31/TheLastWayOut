@@ -16,8 +16,13 @@ export const body = {
   },
   update(dt) {
     const G = this.G, p = G.player; if (!this.root) return
+    if (G._helmetPoseT > 0) G._helmetPoseT = Math.max(0, G._helmetPoseT - dt)
     // The rig's hair/cap stays underneath; the shell covers it when worn.
-    if (this.helmet) this.helmet.visible = !!G.hasHelmet
+    if (this.helmet) {
+      this.helmet.visible = !!G.hasHelmet
+      const v = this.helmet.userData && this.helmet.userData.visor
+      if (v) v.rotation.x += (((G.hasHelmet && G.visorDown) ? 0 : -0.95) - v.rotation.x) * Math.min(1, dt * 8)
+    }
     const vis = ((!!G.tpp && !G.camOverride) || !!G.showBody) && !!G.level
     this.root.visible = vis; if (!vis) return
     if (p.mode === 'ride' && G.scooter) {
@@ -27,7 +32,7 @@ export const body = {
       this.P.setPose('sit'); this.P.crouch = 0; this.P.update(dt, 0)
     } else {
       this.root.position.set(p.pos.x, p.pos.y, p.pos.z); this.root.rotation.y = p.yaw
-      this.P.setPose(G.bodyPose || (p.push ? 'steer' : 'stand')); this.P.crouch = p.crouch; this.P.update(dt, p.push ? Math.abs(p.vel) : p.vel)
+      this.P.setPose(G._helmetPoseT > 0 ? 'hands_up' : (G.bodyPose || (p.push ? 'steer' : 'stand'))); this.P.crouch = p.crouch; this.P.update(dt, p.push ? Math.abs(p.vel) : p.vel)
     }
   }
 }

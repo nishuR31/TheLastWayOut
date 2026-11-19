@@ -24,15 +24,20 @@ export const CHAPTERS = [
 ]
 let token = 0
 export function stopStory() { token++; G.abort() }
+// The level each chapter first loads. Streaming arms the next one so its
+// entrance can be placed exactly where the player stands at the handoff.
+const LEVEL_OF = ['road', 'camp', 'night', 'bamboo', 'village', 'escort', 'escort', 'shamshan', 'exit', 'home', 'shamshan', 'shamshan', 'tea', 'hospital']
+
 export async function play(idx, { onEnd }) {
   const my = ++token
   G.abort(); G.beginRun(); G.flags = G.flags || {}; const s = { onEnd, branch: (CHAPTERS[idx] && CHAPTERS[idx].branch) || null, idx }
-  G.flags = {}
+  G.flags = {}; G._streamed = false; G._streamedChapter = false; G._streamArmed = null
   try {
     for (let i = idx; i < CHAPTERS.length; i++) {
       const c = CHAPTERS[i]
       if (c.branch && c.branch !== s.branch) continue
       if (my !== token) return
+      G._streamArmed = LEVEL_OF[i + 1] || null
       s.idx = i; await c.run(s)
     }
   } catch (e) { if (e !== 'abort') throw e }

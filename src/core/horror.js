@@ -23,6 +23,8 @@ class Horror {
     this.kickV = 0
     this.beatT = 8
     this.scareT = 26
+    this.walkBeatT = R.range(7, 13)
+    this.closeT = R.range(24, 42)
     this.events = []
     this.figures = []
     this.root = null
@@ -83,29 +85,45 @@ class Horror {
     this.beatT = R.range(6, 11)
     this.scareT = R.range(22, 36)
     const at = (s, fn) => this.events.push({ at: this.t + s, fn })
+    const P = (dx, dz, y = 1) => { const p = this.G.player.pos; return { x: p.x + dx, y, z: p.z + dz } }
     if (name === 'camp') {
       at(14, () => this.apparition('shadow', { dist: 17 }))
+      at(26, () => audio.cough(P(-7, 9, 1.6), 2))
       at(38, () => { audio.rustle(null, 0.6); this.kick(0.12) })
+      at(52, () => { audio.dog(P(-18, 24), 3); this.kick(0.1) })
     } else if (name === 'night') {
       at(9, () => this.apparition('shadow', { dist: 13 }))
+      at(18, () => audio.snake(P(1.6, -1.2, 0.2)))
       at(24, () => { audio.payal(null, 1); this.kick(0.15) })
+      at(33, () => { audio.windGust(); this.G.camShake && this.G.camShake(0.25) })
+      at(44, () => this.scare('scream', 0.8))
     } else if (name === 'bamboo') {
       at(7, () => audio.closeBreath(0.7))
       at(16, () => this.apparition('crawler', { dist: 11 }))
+      at(24, () => audio.cough(P(4, 7, 1.6), 2))
       at(30, () => { this.kick(0.22); audio.drone(3) })
+      at(41, () => { audio.rainSwell(); audio.thunder(2.2) })
     } else if (name === 'village') {
       at(6, () => this.apparition('eyes', { dist: 13, life: 5 }))
       at(18, () => { audio.whisper(null, 6); this.kick(0.15) })
+      at(26, () => audio.dog(P(-16, 12), 3))
       at(34, () => this.apparition('shadow', { dist: 15 }))
     } else if (name === 'escort') {
       at(10, () => { audio.rustle(null, 0.9); this.kick(0.14) })
+      at(20, () => audio.snake(P(-1.4, 1.8, 0.2)))
       at(26, () => this.apparition('shadow', { dist: 12 }))
+      at(38, () => this.scare('cough', 0.7))
     } else if (name === 'shamshan') {
       at(5, () => { audio.drone(4, 0.18); this.kick(0.25) })
       at(13, () => this.apparition('tall', { dist: 18, life: 9 }))
+      at(22, () => audio.windGust(1.2))
       at(28, () => this.scare('sting', 0.8))
+      at(40, () => this.scare('dog', 0.7))
     } else if (name === 'exit') {
       at(12, () => this.apparition('shadow', { dist: 16 }))
+      at(27, () => audio.cough(P(5, 8, 1.6), 2))
+    } else if (name === 'road' || name === 'home' || name === 'tea' || name === 'hospital') {
+      at(20, () => audio.cough(P(-6, 8, 1.6), 1))
     }
   }
 
@@ -113,23 +131,44 @@ class Horror {
     const r = Math.random()
     const p = G.player.pos
     const at = (dx, dz) => ({ x: p.x + dx, y: 1, z: p.z + dz })
-    if (r < 0.12) audio.whisper(null, R.int(3, 7))
-    else if (r < 0.22) audio.rustle(null, 0.7)
-    else if (r < 0.32) audio.leaves(at(R.range(-9, 9), R.range(-9, 9)), 0.6)
-    else if (r < 0.4) audio.knock(null, R.int(1, 3), 0.5)
-    else if (r < 0.47) audio.crack(null, 0.6)
-    else if (r < 0.54) audio.payal(null, 1)
-    else if (r < 0.61) audio.howl(null)
-    else if (r < 0.68) audio.eyeShimmer(at(R.range(-12, 12), R.range(-12, 12)))
-    else if (r < 0.75) audio.shadowWhoosh(at(R.range(-8, 8), R.range(-8, 8)))
-    else if (r < 0.81) audio.cloth(at(R.range(-5, 5), R.range(-5, 5)))
-    else if (r < 0.87) audio.figureMoan(at(R.range(-16, 16), R.range(-16, 16)))
-    else if (r < 0.92) audio.echoCall(at(R.range(-10, 10), R.range(-10, 10)))
-    else if (r < 0.96) audio.diyaChime(at(R.range(-6, 6), R.range(-6, 6)))
+    if (r < 0.1) audio.whisper(null, R.int(3, 7))
+    else if (r < 0.18) audio.rustle(null, 0.7)
+    else if (r < 0.26) audio.leaves(at(R.range(-9, 9), R.range(-9, 9)), 0.6)
+    else if (r < 0.32) audio.knock(null, R.int(1, 3), 0.5)
+    else if (r < 0.38) audio.crack(null, 0.6)
+    else if (r < 0.44) audio.payal(null, 1)
+    else if (r < 0.5) audio.dog(at(R.range(-22, 22), R.range(-22, 22)), R.int(2, 4))
+    else if (r < 0.56) audio.cough(at(R.range(-9, 9), R.range(-9, 9), 1.6), R.int(1, 3))
+    else if (r < 0.62) audio.snake(at(R.range(-4, 4), R.range(-4, 4), 0.2))
+    else if (r < 0.68) audio.windGust(0.8)
+    else if (r < 0.73) { audio.rainSwell(0.8); if (Math.random() < 0.4) audio.thunder(2.5) }
+    else if (r < 0.78) audio.howl(at(R.range(-16, 16), R.range(-16, 16)))
+    else if (r < 0.83) audio.eyeShimmer(at(R.range(-12, 12), R.range(-12, 12)))
+    else if (r < 0.87) audio.shadowWhoosh(at(R.range(-8, 8), R.range(-8, 8)))
+    else if (r < 0.9) audio.cloth(at(R.range(-5, 5), R.range(-5, 5)))
+    else if (r < 0.93) audio.figureMoan(at(R.range(-16, 16), R.range(-16, 16)))
+    else if (r < 0.96) audio.echoCall(at(R.range(-10, 10), R.range(-10, 10)))
     else audio.drone(2, 0.1)
     // Give the hearer a direction to turn toward: an off-axis point in the dark.
     const ang = r * Math.PI * 2
     if (this.onEvent) this.onEvent('ambient', { x: p.x + Math.cos(ang) * 8, y: 1.3, z: p.z + Math.sin(ang) * 8 })
+  }
+
+  // Close, movement-triggered beats: the forest answers footsteps.
+  walkBeat(G) {
+    const p = G.player.pos
+    const at = (dx, dz, y = 1) => ({ x: p.x + dx, y, z: p.z + dz })
+    const r = Math.random()
+    if (r < 0.2) audio.snake(at(R.range(-2, 2), R.range(-2, 2), 0.15))
+    else if (r < 0.36) audio.cough(at(R.range(-7, -3), R.range(-7, 7), 1.6), R.int(1, 2))
+    else if (r < 0.5) audio.whisper(at(R.range(-3, 3), R.range(-3, 3), 1.5), R.int(4, 8))
+    else if (r < 0.62) audio.leaves(at(R.range(-5, 5), R.range(-5, 5)), 0.9)
+    else if (r < 0.72) audio.dog(at(R.range(-18, 18), R.range(-18, 18)), R.int(2, 3))
+    else if (r < 0.82) { audio.windGust(0.9); if (G.camShake) G.camShake(0.22) }
+    else if (r < 0.9) audio.rainSwell(0.9)
+    else audio.puff(Math.random() < 0.5 ? -0.8 : 0.8)
+    this.kick(0.08 + this.value * 0.06)
+    if (this.onEvent) this.onEvent('walk-beat', at(R.range(-6, 6), R.range(-6, 6)))
   }
 
   flash(white = false, ms = 90) {
@@ -144,6 +183,10 @@ class Horror {
     if (!this.G) return
     if (this.onEvent) this.onEvent('scare-' + kind, null)
     const G = this.G
+    const P = (dx, dz, y = 1) => ({ x: G.player.pos.x + dx, y, z: G.player.pos.z + dz })
+    const fl = (ms = 80) => { if (!(G.cfg && G.cfg.reduceFlash)) this.flash(false, ms) }
+    const sh = (v) => { if (G.camShake) G.camShake(G.cfg && G.cfg.reduceShake ? v * 0.25 : v) }
+    const hush = (ms) => { audio.silence(true); clearTimeout(this.silenceTimer); this.silenceTimer = setTimeout(() => audio.silence(false), ms) }
     if (kind === 'silence') {
       audio.silence(true); audio.drone(2.4, 0.2)
       clearTimeout(this.silenceTimer)
@@ -153,15 +196,39 @@ class Horror {
     }
     if (kind === 'creature') {
       this.apparition('tall', { dist: 7, life: 2.5, angle: 0.25 })
-      audio.figureMoan(G.player.pos); audio.sting(intensity); this.flash(false, 70)
-      G.camShake(1.6); audio.tinnitus(3000, 1.6, 0.14)
+      audio.figureMoan(G.player.pos); audio.sting(intensity); fl(70)
+      sh(1.6); audio.tinnitus(3000, 1.6, 0.14)
       this.kick(0.5)
+      return
+    }
+    if (kind === 'scream') {
+      hush(2400); audio.scream(P(-4, 6)); audio.sting(intensity); fl(110); sh(1.5)
+      this.apparition('tall', { dist: 5, life: 2.2, angle: 0.35 })
+      setTimeout(() => audio.tinnitus(3000, 1.4, 0.13), 160); this.kick(0.55)
+      return
+    }
+    if (kind === 'dog') {
+      audio.dog(P(-3, 7), 4); audio.rustle(P(2, 3), 0.9); sh(0.7)
+      this.apparition('crawler', { dist: 4.5, life: 2.4, angle: 0.4 }); this.kick(0.4)
+      return
+    }
+    if (kind === 'snake') {
+      audio.snake(P(0.8, -0.6, 0.15)); audio.gasp(); fl(60); sh(0.5); this.kick(0.45)
+      return
+    }
+    if (kind === 'cough') {
+      audio.cough(P(-2, 5, 1.6), 2); audio.puff(-0.6); sh(0.5)
+      this.apparition('shadow', { dist: 5, life: 2, angle: 0.3 }); this.kick(0.4)
+      return
+    }
+    if (kind === 'whisper') {
+      audio.whisper(P(-1, 1.5, 1.5), 9); audio.puff(0.7); sh(0.4)
+      this.apparition('shadow', { dist: 6, life: 2, angle: 0.5 }); this.kick(0.35)
       return
     }
     // default: hard sting, black flash, camera jolt, a shape almost on top of the player
     audio.sting(intensity); audio.shadowWhoosh(G.player.pos); audio.cloth(G.player.pos)
-    this.flash(false, 80)
-    G.camShake(1.2 + intensity)
+    fl(80); sh(1.2 + intensity)
     this.apparition('shadow', { dist: R.range(5, 8), life: 1.8, angle: R.range(0.2, 0.6) })
     setTimeout(() => audio.tinnitus(R.range(2400, 3600), 1.3, 0.12), 180)
     this.kick(0.45)
@@ -220,14 +287,40 @@ class Horror {
 
     this.beatT -= dt
     if (this.beatT <= 0) { this.beatT = R.range(10, 22) * (1 - this.value * 0.5); if (this.value > 0.16) this.ambientBeat(G) }
+
+    // The forest reacts to footsteps: snakes near the boot, a cough just out
+    // of sight, whispering at the ear, gusts and rain swells between trees.
+    const p = G.player
+    const moving = p && p.mode === 'walk' && Math.abs(p.vel) > 0.6
+    if (moving) {
+      this.walkBeatT -= dt
+      if (this.walkBeatT <= 0) {
+        this.walkBeatT = R.range(8, 17) * (1 - this.value * 0.45)
+        if (this.value > 0.14 && Math.random() < 0.7) this.walkBeat(G)
+      }
+      this.closeT -= dt * 1.5
+    } else this.closeT -= dt * 0.4
+    if (this.closeT <= 0 && this.value > 0.42) {
+      this.closeT = R.range(32, 60)
+      this.apparition('tall', { dist: R.range(4, 7), life: 1.6, angle: R.range(0.35, 0.75) })
+      audio.puff(Math.random() < 0.5 ? -0.7 : 0.7)
+      this.kick(0.3)
+    }
+
     this.scareT -= dt
-    if (this.scareT <= 0 && this.value > 0.4) { this.scareT = R.range(30, 70); this.scare(Math.random() < 0.3 ? 'creature' : 'sting', 0.7) }
+    if (this.scareT <= 0 && this.value > 0.4) {
+      this.scareT = R.range(24, 52)
+      const kinds = ['sting', 'sting', 'creature', 'scream', 'dog', 'snake', 'cough', 'whisper']
+      this.scare(kinds[Math.floor(Math.random() * kinds.length)], 0.7)
+    }
 
     this.updateFigures(dt, G)
   }
 
   reset() {
     this.value = 0; this.kickV = 0; this.level = null; this.events = []
+    this.beatT = R.range(6, 11); this.scareT = R.range(24, 40)
+    this.walkBeatT = R.range(7, 13); this.closeT = R.range(26, 46)
     this.figures.forEach(f => { f.life = 0; f.group.visible = false })
     if (this.dreadEl) this.dreadEl.style.opacity = '0'
     if (typeof document !== 'undefined') { document.body.dataset.scene = ''; document.documentElement.style.setProperty('--dread', '0'); this._cssDread = '0' }

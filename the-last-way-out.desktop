@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=The Last Way Out
-Comment=A grounded first-person horror game - Nishan & Nishant
-Exec=bash -c 'cd "$(dirname "$(readlink -f %k)")" && ./run.sh'
-Terminal=false
-Categories=Game;AdventureGame;

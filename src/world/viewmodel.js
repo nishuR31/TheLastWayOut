@@ -3,6 +3,7 @@
 import * as THREE from 'three'
 import { phone } from '../core/phone.js'
 import { damp } from '../core/util.js'
+import { ridingHelmet } from './build.js'
 
 const SKIN = '#9a6544', SLEEVE = '#27424a'
 const smooth = (t) => t * t * (3 - 2 * t)
@@ -27,10 +28,17 @@ const KEY_STOP = [
   [0.75, 0.03, -0.47, -0.57, -0.3, 0, -1.1, 1], [1.1, 0.03, -0.47, -0.57, -0.3, 0, 0, 1], [1.4, 0.03, -0.46, -0.4, -0.3, 0, 0, 1],
   [2.0, ...POCKET, 1]
 ]
+// swing a leg over and step down; 'step' fires as the foot reaches the ground
+const DISMOUNT = [
+  [0, 0.12, -0.36, -0.5, -0.3, 0, 0, 0],
+  [0.4, 0.2, -0.44, -0.5, -0.55, 0.06, 0.25, 0],
+  [0.75, 0.32, -0.72, -0.35, -0.85, 0.12, 0.45, 0],
+  [1.15, ...POCKET, 0]
+]
 const POSES = { pocket: POCKET, phone: [0.09, -0.22, -0.42, 0.1, -0.12, 0.02], torch: [0.26, -0.3, -0.5, -0.45, -0.18, 0] }
 
 export const vm = {
-  G: null, root: null, hand: null, phoneM: null, keyM: null, lens: null, anim: null, mode: 'pocket', t: 0,
+  G: null, root: null, hand: null, phoneM: null, keyM: null, lens: null, helmetM: null, anim: null, hat: null, mode: 'pocket', t: 0,
   init(G) {
     this.G = G
     const root = this.root = new THREE.Group(); root.visible = false; G.camera.add(root)
@@ -47,22 +55,36 @@ export const vm = {
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.068, 0.148), new THREE.MeshBasicMaterial({ color: '#7fa6d6', depthTest: false })); scr.position.z = 0.0047; ph.add(scr)
     const lens = this.lens = new THREE.Mesh(new THREE.CircleGeometry(0.011, 12), new THREE.MeshBasicMaterial({ color: '#fff6d0', depthTest: false })); lens.position.set(-0.02, 0.06, -0.0047); lens.rotation.y = Math.PI; ph.add(lens)
     const key = this.keyM = makeKeyMesh(); key.position.set(0, 0.0, -0.05); key.visible = false; hand.add(key)
+    // a helmet in the hands for the take-off / put-on sequence
+    const hm = this.helmetM = ridingHelmet('#c02020'); hm.scale.setScalar(0.62)
+    hm.position.set(0, 0.16, -0.06); hm.visible = false; hand.add(hm)
     root.traverse(o => { if (o.isMesh) o.renderOrder = 999 })
     this.pos = new THREE.Vector3(...POCKET.slice(0, 3)); this.rot = new THREE.Vector3(...POCKET.slice(3))
   },
-  reset() { this.anim = null; if (this.G) this.G.keyBusy = false; if (this.keyM) this.keyM.visible = false },
-  _play(frames, sc, onEvent) {
-    return new Promise(res => { this.anim = { frames, t: 0, sc, res, onEvent, fired: new Set() } })
+  reset() { this.anim = null; this.hat = null; if (this.G) this.G.keyBusy = false; if (this.keyM) this.keyM.visible = false; if (this.helmetM) this.helmetM.visible = false },
+  _play(frames, sc, onEvent, kind) {
+    return new Promise(res => { this.anim = { frames, t: 0, sc, res, onEvent, fired: new Set(), kind } })
   },
   // take the key out, push it in, twist (engine starts), leave it in the ignition
   keyStart(sc, onTwist) {
     if (this.anim) { this.anim.res() }
-    return this._play(KEY_START, sc, (ev) => { if (ev === 'twist') onTwist && onTwist() })
+    return this._play(KEY_START, sc, (ev) => { if (ev === 'twist') onTwist && onTwist() }, 'start')
   },
   keyStop(sc, onTwist) {
     if (this.anim) { this.anim.res() }
     if (sc && sc.keyFix) sc.keyFix.visible = true
-    return this._play(KEY_STOP, sc, (ev) => { if (ev === 'twist') onTwist && onTwist() })
+    return this._play(KEY_STOP, sc, (ev) => { if (ev === 'twist') onTwist && onTwist() }, 'stop')
+  },
+  // lift the helmet off the rack / bike and put it on (or reverse it)
+  helmetAnim(putOn, onDone) {
+    if (this.anim) { this.anim.res(); this.anim = null }
+    if (this.hat) { this.hat.res(); this.hat = null }
+    return new Promise(res => { this.hat = { t: 0, dur: 1.05, putOn, onDone, fired: false, res } })
+  },
+  // swing a leg over the bike and step down
+  dismount(sc, onStep) {
+    if (this.anim) { this.anim.res() }
+    return this._play(DISMOUNT, sc, (ev) => { if (ev === 'step') onStep && onStep() }, 'dismount')
   },
   _sample(fr, t) {
     if (t <= fr[0][0]) return fr[0]
@@ -75,22 +97,39 @@ export const vm = {
     const G = this.G, root = this.root; if (!root) return
     const hidden = G.tpp || G.camOverride
     let want = phone.open ? 'phone' : (G.torchActive() ? 'torch' : 'pocket')
+    if (this.hat) {
+      const h = this.hat; h.t += dt
+      const k = Math.min(1, h.t / h.dur), e = smooth(k)
+      const from = h.putOn ? [0.28, -0.78, -0.1] : [0.03, -0.24, -0.36]
+      const to = h.putOn ? [0.03, -0.24, -0.36] : [0.28, -0.78, -0.1]
+      this.pos.set(from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e, from[2] + (to[2] - from[2]) * e)
+      this.rot.set(-0.2 + e * 0.25, 0, h.putOn ? -0.5 + e * 0.5 : e * -0.5)
+      this.helmetM.visible = true
+      this.helmetM.rotation.x = (h.putOn ? -0.5 : 0.5) * (1 - e)
+      if (k >= 0.5 && !h.fired) { h.fired = true; h.onDone && h.onDone() }
+      if (k >= 1) { this.hat = null; this.helmetM.visible = false; h.res() }
+      this.phoneM.visible = false; this.keyM.visible = false
+      root.visible = !hidden; this._apply(); return
+    }
     if (this.anim) {
       const A = this.anim; A.t += dt
       const s = this._sample(A.frames, A.t)
+      const kind = A.kind || (A.frames === KEY_START ? 'start' : 'stop')
       this.pos.set(s[1], s[2], s[3]); this.rot.set(s[4], s[5], s[6])
-      this.phoneM.visible = false; this.keyM.visible = s[7] === 1
+      this.phoneM.visible = false; this.keyM.visible = s[7] === 1 && kind !== 'dismount'
       const fix = A.sc && A.sc.keyFix
-      if (A.frames === KEY_START) {
+      if (kind === 'start') {
         if (A.t >= 1.25 && fix) { fix.visible = true; fix.userData.inner.rotation.z = A.t >= 1.6 ? 1.1 : Math.min(1.1, Math.max(0, (A.t - 1.25) / 0.35 * 1.1)) }
         if (A.t >= 1.5 && !A.fired.has('twist')) { A.fired.add('twist'); A.onEvent && A.onEvent('twist') }
-      } else {
+      } else if (kind === 'stop') {
         if (fix) { fix.visible = A.t < 0.75 || false; if (A.t < 0.75) fix.userData.inner.rotation.z = 1.1 }
         if (A.t >= 0.75 && A.t < 1.1 && fix) { fix.visible = false }
         if (A.t >= 0.7 && !A.fired.has('twist')) { A.fired.add('twist'); A.onEvent && A.onEvent('twist') }
+      } else if (A.t >= 0.7 && !A.fired.has('step')) {
+        A.fired.add('step'); A.onEvent && A.onEvent('step')
       }
       const end = A.frames[A.frames.length - 1][0]
-      if (A.t >= end) { this.anim = null; if (A.frames === KEY_STOP && A.sc && A.sc.keyFix) A.sc.keyFix.visible = false; A.res() }
+      if (A.t >= end) { this.anim = null; if (kind === 'stop' && A.sc && A.sc.keyFix) A.sc.keyFix.visible = false; A.res() }
       root.visible = !hidden; this._apply(); return
     }
     this.keyM.visible = false; this.phoneM.visible = true

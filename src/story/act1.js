@@ -2,7 +2,7 @@
 import { items } from '../core/items.js'
 import { makeThali, makeLassi, makeCamera } from '../world/props.js'
 
-import { baseGoal, G, caption, choose, ui, audio, THREE, N, T, say, wait, load, startScene, endScene, setTime, compHold, compFollow, reveal, reach, fear, use, gate, snapTo, go } from './helpers.js'
+import { baseGoal, G, caption, choose, ui, audio, THREE, N, T, say, wait, load, startScene, endScene, setTime, compHold, compFollow, reveal, reach, fear, use, gate, snapTo, go, trailLen } from './helpers.js'
 
 export async function ch1(s) {
   G.clockRate = 0
@@ -13,7 +13,7 @@ export async function ch1(s) {
   c.place(...H.local(2.4, 0, -2.2).toArray().filter((v, i) => i !== 1), -1.8)
   c.pose('sit'); c.mode = 'hold'; c.holdPos = null
   if (c.P) { c.P.crouch = 0; c.root.position.y = 0 }
-  const mom = G.addActor('mother'); const mp = H.local(-3.1, 0, -1.4); mom.place(mp.x, mp.z, 0.5); mom.sfx = false
+  const mom = G.addActor('mother'); const mp = H.local(2.4, 0, 4.6); mom.place(mp.x, mp.z, -0.4); mom.sfx = false
   mom.P.setPose('stand')
   G.clockRate = 30
   // ---- opening shot: the ceiling fan turning, a slow drift across the room, then down to Nishan's own eyes (Space skips) ----
@@ -26,28 +26,35 @@ export async function ch1(s) {
   // warm the next level modules in the background so later cuts are instant.
   G.preload(['road', 'camp', 'bamboo'])
   try {
-    // WAKE UP ON THE BED: eyes open at pillow height, the phone lit face-up a
-    // little way across the bed, morning light from the curtain. The old
-    // from-point sat ~0.3 m from the phone, so all you saw was a sliver of glass.
-    // Start further back and drift up/out into the room so the beat reads clearly.
+    // WAKE UP IN BED: first person, eyes blinking open, phone face-up on the
+    // sheet, Mummy calling from the doorway. No camera crane — you ARE in bed.
     const bedPos = L.refs.bedPos
-    const phoneP = H.local(-3.2, 0.72, -2.0)
-    await G.shot({
-      from: V3(bedPos.x - 0.75, bedPos.y + 0.42, bedPos.z - 0.62),
-      to: V3(bedPos.x + 0.95, bedPos.y + 0.62, bedPos.z + 0.7),
-      lookFrom: V3(phoneP.x, phoneP.y, phoneP.z),
-      lookTo: V3(-0.6, 1.15, -1.2), // open out into the room
-      dur: 3.2, fov: 54, fov1: 62, handheld: 0.12
-    })
-    caption('[morning light through the thin curtain. You wake up on the bed — phone face-up at 74%. Nishant is sprawled across the room, scrolling]', 4.8)
-    await G.shot({ from: fanP.clone().add(V3(0.35, -0.55, 1.1)), to: H.local(1.0, 2.0, 2.2), lookFrom: fanP, lookTo: friend, dur: 4.2, fov: 52, fov1: 62 })
-    await G.shot({ from: H.local(1.0, 2.0, 2.2), to: eye, lookFrom: friend, lookTo: V3(tbl.x, 0.9, tbl.z), dur: 3.4, fov: 62, fov1: G.cfg.fov || 70 })
-  } finally { G.endShot(); p0.canMove = true; p0.canLook = true }
+    const phoneP = H.local(-3.7, 0.72, -4.5)
+    p0.pos.set(bedPos.x, bedPos.y - 0.3, bedPos.z)
+    p0.yaw = Math.atan2(phoneP.x - p0.pos.x, phoneP.z - p0.pos.z)
+    p0.pitch = -0.12
+    p0.crouch = 0; p0.headDip = 1.15 // lying on the bed, eye at pillow height
+    const wb = document.getElementById('wakeblink')
+    if (wb) { wb.style.transition = 'none'; wb.style.opacity = '1'; void wb.offsetWidth; wb.style.transition = 'opacity 1.6s ease-out'; wb.style.opacity = '0' }
+    await wait(1.7)
+    caption('[morning light through the thin curtain. You wake up on the bed — phone face-up at 74%. From the doorway, Mummy calls]', 5)
+    await say('Mummy', 'Nishan? Uth ja. Chai thandi ho jayegi.', 'Nishan? Wake up. Your tea will get cold.', { pos: H.local(2.4, 1.5, 4.6), dur: 4.2 })
+    await N('(aankhein malte hue) Haan, aa raha hoon.', '(rubbing my eyes) Yes, coming.', { dur: 2.8 })
+    // sit up and stand beside the bed before control is handed back
+    const stand = H.local(-1.8, 0, -3.0)
+    for (let i = 0; i < 20; i++) {
+      p0.headDip *= 0.85
+      p0.pos.x += (stand.x - p0.pos.x) * 0.12
+      p0.pos.z += (stand.z - p0.pos.z) * 0.12
+      await wait(0.05)
+    }
+    p0.headDip = 0
+  } finally { p0.canMove = true; p0.canLook = true }
   await wait(0.8)
   ui.toast('WASD — chalo · Mouse — dekho · E — baat / use', 5)
   // 1. talk to Mummy
   ui.objective('Mummy se baat karo · Talk to Mummy')
-  const t1 = use(H.local(-2.6, 1.2, -0.9), 'Mummy se baat karo', { r: 3.2, cone: 0.1 })
+  const t1 = use(H.local(2.4, 1.2, 4.6), 'Mummy se baat karo', { r: 3.2, cone: 0.1 })
   await t1
   mom.face(G.player.pos); mom.look(G.camera.position)
   await N('Mummy, hum Nishant ke saath thoda ghoomne ja rahe hain.', 'Mom, Nishant and I are going out for a ride.')
@@ -143,7 +150,15 @@ export async function ch1(s) {
     try {
       await G.shot({ from: V3(L.refs.pump.x + 1.7, 2.2, L.refs.pump.z - 2.3), to: V3(L.refs.pump.x + 0.3, 1.3, L.refs.pump.z - 0.5), lookFrom: V3(L.refs.pump.x, 1.1, L.refs.pump.z), lookTo: V3(L.refs.pump.x, 0.85, L.refs.pump.z), dur: 2.0, fov: 50, fov1: 63 })
     } finally { G.endShot() }
+    // the attendant works the pump while the fuel goes in
+    const man = L.refs.pumpMan
+    if (man && man.P) {
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.28, 6), new THREE.MeshStandardMaterial({ color: '#222' }))
+      man.P.hold(nozzle, 1); man.pose('point')
+    }
     audio.pour && audio.pour(null, 1.2)
+    await wait(1.1)
+    if (man) { if (man.P) man.P.hold(null); man.pose('stand') }
     await T('Bhai, yahin tank full karwa le.', 'Fill the tank right here.', { dur: 2.2 })
     const fill = await choose('Tank full karwayein?', ['Haan, full karwa lo', 'Nahi, half bahut hai'], 1)
     G.tankFull = fill === 0
@@ -228,7 +243,23 @@ export async function ch1(s) {
   await T('Board likha hai — paanch baje tak entry. Uske baad andar nahi jaate.', 'The board says entry till five. After that they do not let anyone in.', { dur: 3 })
   await N('Hum chaar tak wapas nikal jayenge. Aaram se. Yahi rasta camp site tak jata hai.', 'We will be out by four. Easily. This road leads to the campsite.', { dur: 3.2 })
   await T('Haan haan, chaar se pehle. Chalo.', 'Yes yes, before four. Come on.', { dur: 2 })
-  await gate(() => P() > L.roadLen - 30, () => rsnap(L, L.roadLen - 30), 0)
+  // Both stop at the board. The gatekeeper points them right onto the yellow
+  // kaccha track — that, not the tarmac, is the way to the camp.
+  await gate(() => G.player.mode !== 'ride' || Math.abs(G.scooter.speed) < 1.5, () => {
+    if (G.player.mode === 'ride' && G.scooter) G.scooter.chassis.velocity.set(0, 0, 0)
+    G.player.vel = 0
+  }, 0)
+  await T('Ruko, gatekeeper kuch keh raha hai.', 'Stop — the gatekeeper is saying something.', { dur: 2.6 })
+  await say('Gatekeeper', 'Bike yahin chhod do. Kaccha raasta right mein hai, usi se andar jao.', 'Leave the bike here. The dirt track is on the right — take that in.', { pos: L.refs.edge, dur: 5 })
+  if (L.kaccha && L.kaccha.length) {
+    const k0 = L.kaccha[0], kEnd = L.kaccha[L.kaccha.length - 1]
+    baseGoal(kEnd.x, kEnd.z, 'Kacche raaste se andar · Take the dirt track', L.kaccha, trailLen(L.kaccha))
+    ui.toast('Right turn — yellow kaccha road. Bike yahin safe hai.', 4)
+    caption('[a yellow dirt track turns right. Stalls, a gatekeeper and two guards. Dry twigs lie across the mud.]', 6)
+    await gate(() => G.distToPlayer(k0.x, k0.z) < 5, () => snapTo(k0.x, k0.z), 0, [k0.x, k0.z, 'Kaccha raasta · Dirt track'])
+    await gate(() => G.distToPlayer(kEnd.x, kEnd.z) < 8, () => snapTo(kEnd.x, kEnd.z), 0, [kEnd.x, kEnd.z, 'Andar · Into the forest'])
+    await N('Bike peeche reh gayi. Wapas isi raaste se milna hoga.', 'The bike is behind us. We will have to find it by this same track.', { dur: 3.4 })
+  }
   while (busy) await wait(0.3)
   G.rideHint = null; ui.objective(null); G.goal = null
 }

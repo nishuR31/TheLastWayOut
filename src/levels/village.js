@@ -148,8 +148,6 @@ export function build(G, opts = {}) {
   const ph = garlandedPhoto(); H.place(ph, 3.74, 1.0, 1.5, -Math.PI / 2)
   const tb = table(1.0, 0.7, 0.42); H.place(tb, 0.6, 0.3, 0, 0)
   const mat = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshStandardMaterial({ map: tex.cloth('#6a5a3a', '#b8a070', 'check'), roughness: 1 })); mat.rotation.x = -Math.PI / 2; H.place(mat, 0.2, 0.2, 0.025)
-  diya(L, 0, 0, 0); // placeholder removed below
-  L.group.children.pop(); L.group.children.pop(); L.flick.pop()
   L.refs.tray = H.local(0.6, 0.45, 0.3)
   L.refs.sit1 = H.local(-0.5, 0, 1.0); L.refs.sit2 = H.local(1.6, 0, 1.0)
   L.refs.uncleSpot = H.local(0.6, 0, -1.0); L.refs.daughterSpot = H.local(2.5, 0, -1.2)

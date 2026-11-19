@@ -4,7 +4,7 @@ import * as CANNON from 'cannon-es'
 import { tex } from './textures.js'
 import { clamp, damp } from '../core/util.js'
 import { makeKeyMesh } from './viewmodel.js'
-import { motorbike } from './build.js'
+import { motorbike, ridingHelmet, mergeStaticMeshes } from './build.js'
 
 const M = (o) => new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.1, ...o })
 // scratch objects reused by the per-frame physics helpers
@@ -26,6 +26,7 @@ export class Scooter {
     // forward = +Z — the player rides the same motorbike model Chacha works on.
     const bike = motorbike(color, true)
     bike.userData.lean.children.slice(0, 4).forEach(c => { c.visible = false }) // hide static wheels; spinning physics wheels below
+    mergeStaticMeshes(bike, [bike.userData.headMesh]) // collapse the small body details into a few draw calls
     this.lean_g.add(bike)
     this.headMesh = bike.userData.headMesh
     if (this.headMesh) this.headMesh.material.emissiveIntensity = 0
@@ -33,12 +34,10 @@ export class Scooter {
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.09), new THREE.MeshStandardMaterial({ map: tex.sign('MP 04 NN 5721', '#f3f3f0', '#111', 512, 128, '700 62px Inter, sans-serif') })); plate.position.set(0, 0.33, -0.705); plate.rotation.y = Math.PI; this.lean_g.add(plate)
     mk(new THREE.BoxGeometry(0.07, 0.07, 0.03), new THREE.MeshStandardMaterial({ color: '#600', emissive: '#f00', emissiveIntensity: 0.25 }), 0, 0.5, -0.7)
     // helmet hanging from the rear holder / mirror by its chin strap
-    const hm = new THREE.Group()
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 10), M({ color: '#c02020', roughness: 0.35, metalness: 0.15 }))
-    shell.scale.set(1, 0.82, 1.05); hm.add(shell)
-    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.008, 5, 14), M({ color: '#2a241d', roughness: 0.9 }))
-    strap.rotation.x = Math.PI / 2; strap.position.y = -0.07; hm.add(strap)
-    hm.position.set(0, 1.12, -0.42); hm.rotation.z = 0.2; hm.visible = false
+    const hm = ridingHelmet('#c02020')
+    hm.scale.setScalar(0.92)
+    if (hm.userData.visor) hm.userData.visor.rotation.x = -0.95 // visor up while hung
+    hm.position.set(0, 1.12, -0.42); hm.rotation.set(0.1, 0, 0.2); hm.visible = false
     this.lean_g.add(hm); this.bikeHelmet = hm
     this.setHelmet(!!G.helmetOnBike)
     // kickstand — folds away when riding / pushing, drops when parked
@@ -100,6 +99,10 @@ export class Scooter {
   light(on) { this.headLight.intensity = on ? 18 : 0; this.headMesh.material.emissiveIntensity = on ? 2 : 0; this.lightOn = on }
   place(x, z, yaw = 0) {
     const c = this.chassis; c.position.set(x, 0.62, z); c.velocity.set(0, 0, 0); c.angularVelocity.set(0, 0, 0); c.quaternion.setFromEuler(0, yaw, 0); this.steer = 0; this.lean = 0
+    // Reset the swept-collision ray origin too — otherwise the next drive()
+    // sees a huge jump from the old position and snaps the bike back there.
+    if (this._lastPos) this._lastPos.copy(c.position); else this._lastPos = c.position.clone()
+    this._hitT = 0
   }
   get yaw() { const q = this.chassis.quaternion; _q.set(q.x, q.y, q.z, q.w); return _e.setFromQuaternion(_q, 'YXZ').y }
   get speed() { return this.vehicle.currentVehicleSpeedKmHour / 3.6 }
@@ -159,15 +162,23 @@ export class Scooter {
     const slip = (surf === 'mud' || surf === 'water' || surf === 'wet') ? 2.3 : 4.2
     for (const w of v.wheelInfos) w.frictionSlip = slip
     // A real bike holds a useful steering angle even at speed; only a mild taper.
-    const maxSteer = 0.55 - 0.22 * clamp(asp / 42, 0, 1)
-    this.steer = damp(this.steer, steer * maxSteer, 8, dt)
-    v.setSteeringValue(-this.steer, 0); v.setSteeringValue(-this.steer, 1)
+    const maxSteer = 0.72 - 0.24 * clamp(asp / 22, 0, 1) // generous at walking speed, stable when fast
+    this.steer = damp(this.steer, steer * maxSteer, 11, dt)
+    const sv = sp < -0.2 ? this.steer : -this.steer // intuitive steering while backing
+    v.setSteeringValue(sv, 0); v.setSteeringValue(sv, 1)
+    // A scooter does not jump to 100 km/h: torque falls away as speed builds,
+    // and the player's throttle is eased in the game loop. Backing is weak and
+    // capped, and the bars invert in reverse so it does not feel broken.
+    const top = Math.min(maxSpeed, 22)
     let f = 0
-    if (throttle > 0 && sp < maxSpeed) f = throttle * 620 * (1 - clamp(sp / maxSpeed, 0, 1) * 0.3)
-    else if (throttle < 0) { if (sp > 0.5) { v.wheelInfos.forEach((w, i) => v.setBrake(14, i)); f = 0 } else if (sp > -4) f = throttle * 130 }
+    if (throttle > 0 && sp < top) f = throttle * 260 * (1 - Math.pow(clamp(sp / top, 0, 1), 2) * 0.8)
+    else if (throttle < 0) {
+      if (sp > 0.5) { v.wheelInfos.forEach((w, i) => v.setBrake(10, i)); f = 0 }
+      else if (sp > -3.5) f = throttle * 90
+    }
     const sign = this.G.cfg.engineSign
     ;[2, 3].forEach(i => v.applyEngineForce(f * sign * (this.punctured ? 0.7 : 1), i))
-    const bf = brake ? 24 : (throttle === 0 ? 0.4 : (throttle < 0 && sp > 0.5 ? 14 : 0))
+    const bf = brake ? 8 + Math.abs(sp) * 0.9 : (throttle === 0 ? 0.6 : (throttle < 0 && sp > 0.5 ? 10 : 0))
     if (!(throttle < 0 && sp > 0.5)) v.wheelInfos.forEach((w, i) => v.setBrake(bf, i))
     this.lean = damp(this.lean, -this.steer * clamp(asp / 10, 0, 1) * 0.85, 4, dt)
     // --- grip: kill sideways velocity so the bike rotates about its own axle
